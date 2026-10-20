@@ -11,26 +11,26 @@ from dataclasses import dataclass, field
 from queue import PriorityQueue
 from threading import RLock
 from typing import Any
-from urllib.parse import quote
 
 from tqdm import tqdm
 
 from api.answer import Tiku
-from api.base import Chaoxing, Account, SessionManager, StudyResult
+from api.base import Account
 from api.config import GlobalConst as gc
 from api.exceptions import LoginError, InputFormatError
 from api.logger import configure_console_logger, logger
 from api.notification import Notification
-from api.live import Live
-from api.live_process import LiveProcessor
-
-class ChapterResult(enum.Enum):
-    SUCCESS=0,
-    ERROR=1,
-    NOT_OPEN=2,
-    PENDING=3,
-    STOPPED=4,
-    FORBIDDEN=5  # 403等确定性失败, 重试无意义, 不再重试
+# 平台抽象层：主流程只依赖 Platform 契约，不再写死超星
+from api.platform import (
+    JOB_TYPE_TO_CAPABILITY,
+    ChapterResult,
+    Platform,
+    PlatformManager,
+    PlatformNotSupported,
+    StudyResult,
+    list_platforms,
+    normalize_platform_key,
+)
 
 
 def log_error(func):
@@ -53,9 +53,15 @@ def str_to_bool(value):
 
 def parse_args():
     """解析命令行参数"""
+    platform_choices = [p["key"] for p in list_platforms()]
     parser = argparse.ArgumentParser(
-        description="Samueli924/chaoxing",
+        description="Samueli924/chaoxing · 多平台在线课程学习助手",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+
+    parser.add_argument(
+        "-P", "--platform", type=str, default=None, choices=platform_choices,
+        help=f"要使用的平台: {', '.join(platform_choices)} (默认读取配置文件, 未配置则 chaoxing)",
     )
 
     parser.add_argument("--use-cookies", action="store_true", help="使用cookies登录")
@@ -132,6 +138,10 @@ def load_config_from_file(config_path):
             common_config["password"] = common_config["password"].strip()
         if "verbose" in common_config:
             common_config["verbose"] = str_to_bool(common_config["verbose"])
+        # 平台选择：缺省回落 chaoxing，兼容历史配置文件
+        common_config["platform"] = normalize_platform_key(
+            common_config.get("platform", "") or "chaoxing"
+        )
 
     # 检查并读取tiku节
     if config.has_section("tiku"):
@@ -159,6 +169,7 @@ def build_config_from_args(args):
         "jobs": args.jobs,
         "notopen_action": args.notopen_action if args.notopen_action else "retry",
         "verbose": args.verbose,
+        "platform": normalize_platform_key(getattr(args, "platform", None) or "chaoxing"),
     }
     return common_config, {}, {}
 
@@ -171,127 +182,122 @@ def init_config():
         common_config, tiku_config, notification_config = load_config_from_file(args.config)
         if args.verbose:
             common_config["verbose"] = True
+        # 命令行 -P 优先于配置文件
+        if getattr(args, "platform", None):
+            common_config["platform"] = normalize_platform_key(args.platform)
         return common_config, tiku_config, notification_config
     else:
         return build_config_from_args(args)
 
 
 
-def init_chaoxing(common_config, tiku_config):
-    """初始化超星实例"""
+def init_platform(common_config, tiku_config):
+    """按配置初始化平台实例（替代原来的 init_chaoxing）。
+
+    返回的是 ``Platform`` 子类实例；超星返回的是 ``ChaoxingPlatform``，
+    它与旧的 ``Chaoxing`` 完全兼容。
+    """
+    platform_key = normalize_platform_key(common_config.get("platform", "chaoxing"))
     username = common_config.get("username", "")
     password = common_config.get("password", "")
     use_cookies = common_config.get("use_cookies", False)
-    
+
     # 如果没有提供用户名密码，从命令行获取
     if (not username or not password) and not use_cookies:
         username = input("请输入你的手机号, 按回车确认\n手机号:")
         password = input("请输入你的密码, 按回车确认\n密码:")
-    
+
     account = Account(username, password)
-    
+
     # 设置题库
     tiku = Tiku()
     tiku.config_set(tiku_config)  # 载入配置
     tiku = tiku.get_tiku_from_config()  # 载入题库
     tiku.init_tiku()  # 初始化题库
-    
+
     # 获取查询延迟设置
     query_delay = tiku_config.get("delay", 0)
 
-    # 实例化超星API
+    # 实例化平台
     read_duration = common_config.get("read_duration", 300)
-    chaoxing = Chaoxing(account=account, tiku=tiku, query_delay=query_delay, read_duration=read_duration)
-    
-    return chaoxing
+    platform = PlatformManager.create(
+        platform_key,
+        account=account,
+        tiku=tiku,
+        config=common_config,
+        query_delay=query_delay,
+        read_duration=read_duration,
+    )
+    logger.info(f"已加载平台: {platform.display_name} ({platform_key})")
+    return platform
 
-def process_job(chaoxing: Chaoxing, course: dict, job: dict, job_info: dict, speed: float, stop_event: threading.Event | None = None) -> StudyResult:
-    """处理单个任务点"""
-    # 视频任务
-    if job["type"] == "video":
-        logger.trace(f"识别到视频任务, 任务章节: {course['title']} 任务ID: {job['jobid']}")
-        # 超星的接口没有返回当前任务是否为Audio音频任务
-        video_result = chaoxing.study_video(
-            course, job, job_info, _speed=speed, _type="Video",
-            stop_event=stop_event,
+
+def init_chaoxing(common_config, tiku_config):
+    """向后兼容别名（历史调用方仍在使用这个名字）。"""
+    common_config.setdefault("platform", "chaoxing")
+    return init_platform(common_config, tiku_config)
+
+
+def process_job(platform: Platform, course: dict, job: dict, job_info: dict, speed: float, stop_event: threading.Event | None = None) -> StudyResult:
+    """处理单个任务点。
+
+    任务点的具体实现由平台 adapter 负责（``Platform.process_job``），
+    主流程只负责"该平台是否支持这类任务"的判断，不再内置任何平台私有逻辑。
+    """
+    job_type = job.get("type", "")
+    capability = JOB_TYPE_TO_CAPABILITY.get(job_type)
+    if capability is not None and not platform.supports(capability):
+        logger.warning(
+            f"平台 {platform.display_name} 暂不支持任务类型 {job_type}, 已跳过 "
+            f"-> 章节: {course['title']} 任务ID: {job.get('jobid')}"
         )
-        if video_result == StudyResult.FORBIDDEN:
-            # 进度上报接口403与媒体类型无关, 直接判定失败, 不再尝试音频
-            logger.warning("进度上报被服务端拒绝(403), 任务跳过 -> 任务章节: {} 任务ID: {}", course["title"], job["jobid"])
-            return video_result
-        # 注意: 这里原先会在视频上报失败后改用 dtype=Audio 重报同一个 jobid。
-        # 同一 objectId/jobid 仅改 dtype 属于明显异常请求, 会被风控直接判 403,
-        # 反而导致后续其他任务点连带失败, 因此已移除该回退。
-        if video_result.is_failure():
-            logger.warning(
-                f"视频任务未通过 -> 任务章节: {course['title']} 任务ID: {job['jobid']}, 已跳过"
-            )
-        return video_result
-    # 文档任务
-    elif job["type"] == "document":
-        logger.trace(f"识别到文档任务, 任务章节: {course['title']} 任务ID: {job['jobid']}")
-        return chaoxing.study_document(course, job)
-    # 测验任务
-    elif job["type"] == "workid":
-        logger.trace(f"识别到章节检测任务, 任务章节: {course['title']}")
-        return chaoxing.study_work(course, job, job_info, stop_event=stop_event)
-    # 阅读任务
-    elif job["type"] == "read":
-        logger.trace(f"识别到阅读任务, 任务章节: {course['title']}")
-        return chaoxing.study_read(course, job, job_info, _speed=speed, stop_event=stop_event)
-    elif job["type"] == "work":
-        # 作业/测验同样会长时间轮询, 不接停止信号会让"停止"按钮看起来无效
-        return chaoxing.study_work(course, job, job_info, stop_event=stop_event)
-    # 直播任务
-    elif job["type"] == "live":
-        logger.trace(f"识别到直播任务, 任务章节: {course['title']} 任务ID: {job['jobid']}")
-        try:
-            # 准备直播所需参数
-            defaults = {
-                "userid": chaoxing.get_uid(),
-                "clazzId": course.get("clazzId"),
-                "knowledgeid": job_info.get("knowledgeid")
-            }
-            
-            # 创建直播对象
-            live = Live(
-                attachment=job,
-                defaults=defaults,
-                course_id=course.get("courseId")
-            )
-            
-            # 启动直播处理线程
-            thread = threading.Thread(
-                target=LiveProcessor.run_live,
-                args=(live, speed),
-                daemon=True
-            )
-            thread.start()
-            thread.join()  # 等待直播处理完成
-            return StudyResult.SUCCESS
-        except Exception as e:
-            logger.error(f"处理直播任务时出错: {str(e)}")
-            return StudyResult.ERROR
+        # 平台不支持 ≠ 任务失败：记录日志后放行，避免整章被误判失败
+        return StudyResult.SUCCESS
 
-    logger.error(f"未知任务类型: {job['type']}")
-    return StudyResult.ERROR
+    try:
+        return platform.process_job(
+            course, job, job_info, speed=speed, stop_event=stop_event
+        )
+    except PlatformNotSupported as e:
+        logger.warning(f"平台 {platform.display_name} 未实现 {job_type} 任务处理, 已跳过: {e}")
+        return StudyResult.SUCCESS
+    except Exception as e:
+        logger.exception(f"任务点处理异常 ({job_type}): {e}")
+        return StudyResult.ERROR
 
 
-@dataclass(order=True)
+@dataclass(order=True, unsafe_hash=False)
 class ChapterTask:
+    """章节任务。
+
+    显式定义 ``__hash__`` 是必须的：``@dataclass(order=True)`` 会自动生成
+    ``__eq__``，Python 随即把 ``__hash__`` 置为 ``None``，任务对象就**不可哈希**。
+    而 JobProcessor 用 ``self._settled: set[ChapterTask]`` 做"每个任务只结算一次"
+    的去重，一入队就会抛 ``TypeError: unhashable type: 'ChapterTask'``，
+    表现为 worker 线程全部静默死掉、主线程在 ``_wait_all_settled`` 里永久挂起
+    （界面上就是一直"运行中"、永不结束）。
+
+    这里按 ``index`` 哈希：index 在单个课程内唯一，且与 ``__eq__`` 的
+    比较字段一致（point/result/tries 都是 compare=False）。
+    """
+
     index: int
     point: dict[str, Any] = field(compare=False)
     result: ChapterResult = field(default=ChapterResult.PENDING, compare=False)
     tries: int = field(default=0, compare=False)
 
+    def __hash__(self) -> int:
+        return hash(self.index)
+
+
 class JobProcessor:
     STOP_POINT = {"__stop__": True}
 
-    def __init__(self, chaoxing: Chaoxing, course: dict[str, Any], tasks: list[ChapterTask], config: dict[str, Any], stop_event: threading.Event | None = None, progress_callback=None):
+    def __init__(self, platform: Platform, course: dict[str, Any], tasks: list[ChapterTask], config: dict[str, Any], stop_event: threading.Event | None = None, progress_callback=None):
         if "jobs" not in config or not config["jobs"]:
             config["jobs"] = 4
 
-        self.chaoxing = chaoxing
+        self.platform = platform
         self.course = course
         self.speed = config["speed"]
         self.max_tries = 5
@@ -442,7 +448,7 @@ class JobProcessor:
         返回 True 表示该任务已被放回 retry_queue（由 retry_thread 重新排队，稍后再次结算），
         返回 False 表示该任务已经最终结束，由 worker_thread 调用 _settle()。
         """
-        task.result = process_chapter(self.chaoxing, self.course, task.point, self.speed,
+        task.result = process_chapter(self.platform, self.course, task.point, self.speed,
                                       stop_event=self.stop_event)
 
         match task.result:
@@ -536,7 +542,7 @@ class JobProcessor:
             time.sleep(1) # TODO: Replace with a configurable wait time
 
 
-def process_chapter(chaoxing: Chaoxing, course:dict[str, Any], point:dict[str, Any], speed:float, stop_event: threading.Event | None = None) -> ChapterResult:
+def process_chapter(platform: Platform, course:dict[str, Any], point:dict[str, Any], speed:float, stop_event: threading.Event | None = None) -> ChapterResult:
     """处理单个章节"""
     if stop_event and stop_event.is_set():
         return ChapterResult.STOPPED
@@ -545,11 +551,11 @@ def process_chapter(chaoxing: Chaoxing, course:dict[str, Any], point:dict[str, A
         logger.info(f'章节：{point["title"]} 已标记完成，强制继续处理...')
     
     # 随机等待，避免请求过快
-    chaoxing.rate_limiter.limit_rate(random_time=True,random_min=0, random_max=0.2)
+    platform.rate_limiter.limit_rate(random_time=True,random_min=0, random_max=0.2)
     
     # 获取当前章节的所有任务点
     job_info = None
-    jobs, job_info = chaoxing.get_job_list(course, point)
+    jobs, job_info = platform.get_job_list(course, point)
 
     # 发现未开放章节, 根据配置处理
     if job_info.get("notOpen", False):
@@ -562,7 +568,7 @@ def process_chapter(chaoxing: Chaoxing, course:dict[str, Any], point:dict[str, A
     from concurrent.futures import as_completed
     job_results:list[StudyResult]=[]
     with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = {executor.submit(process_job, chaoxing, course, job, job_info, speed, stop_event): job for job in jobs}
+        futures = {executor.submit(process_job, platform, course, job, job_info, speed, stop_event): job for job in jobs}
         for future in as_completed(futures):
             if stop_event and stop_event.is_set():
                 logger.info("收到停止信号，取消剩余任务点")
@@ -591,14 +597,12 @@ def process_chapter(chaoxing: Chaoxing, course:dict[str, Any], point:dict[str, A
 
 
 
-def process_course(chaoxing: Chaoxing, course:dict[str, Any], config: dict, stop_event: threading.Event | None = None, progress_callback=None) -> list[ChapterTask]:
+def process_course(platform: Platform, course:dict[str, Any], config: dict, stop_event: threading.Event | None = None, progress_callback=None) -> list[ChapterTask]:
     """处理单个课程, 返回学习失败的章节任务列表"""
     logger.info(f"开始学习课程: {course['title']}")
 
     # 获取当前课程的所有章节
-    point_list = chaoxing.get_course_point(
-        course["courseId"], course["clazzId"], course["cpi"]
-    )
+    point_list = platform.get_course_point(course)
 
     # 为了支持课程任务回滚, 采用下标方式遍历任务点
 
@@ -616,114 +620,76 @@ def process_course(chaoxing: Chaoxing, course:dict[str, Any], config: dict, stop
     if progress_callback:
         progress_callback(total_chapters=len(tasks), completed_chapters=0)
 
-    p = JobProcessor(chaoxing, course, tasks, config, stop_event=stop_event, progress_callback=progress_callback)
+    p = JobProcessor(platform, course, tasks, config, stop_event=stop_event, progress_callback=progress_callback)
     p.run()
 
-    # 强制学习时长模式：所有任务完成后，循环访问章节累计学习时长
+    # 强制学习时长模式：所有任务完成后，循环访问章节累计学习时长。
+    # 具体"怎么累计时长"是平台私有的（超星是 multimodal log + readv2 心跳），
+    # 因此下沉到 ``Platform.force_study_duration``，主流程只负责调用与进度上报。
     force_duration = int(config.get("read_duration", 0))
     if force_duration > 0 and point_list.get("points"):
         logger.info(f"所有任务处理完毕，进入强制学习时长模式: {force_duration}s...")
-        _session = SessionManager.get_session()
-        points = point_list["points"]
+        _run_force_duration(
+            platform,
+            course,
+            point_list["points"],
+            force_duration,
+            total_tasks=len(tasks),
+            stop_event=stop_event,
+            progress_callback=progress_callback,
+        )
 
-        # 尝试从课程中查找可用的 objectId/dtoken
-        _objectid, _dtoken = chaoxing._find_course_objectid(course, points)
-        if _dtoken:
-            logger.info(f"找到可用dtoken，将使用多媒体日志API上报阅读时长")
-        else:
-            logger.info("未找到dtoken，将使用备选方案尝试累计时长")
+    tqdm.format_sizeof = _old_format_sizeof
 
-        _fid = chaoxing.get_fid()
-        start = time.time()
-        pbar = tqdm(total=force_duration, desc="强制学习时长", unit_scale=True,
-                    bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt}")
-        idx = 0
-        _report_interval = 20   # 每20秒向服务器上报一次
-        _last_report = -_report_interval  # 首次立即上报
+    return p.failed_tasks
 
+
+def _run_force_duration(platform: Platform, course: dict[str, Any], points: list[dict[str, Any]],
+                        force_duration: int, total_tasks: int,
+                        stop_event: threading.Event | None = None,
+                        progress_callback=None) -> None:
+    """强制的"挂机学习时长"循环。
+
+    平台 adapter 通过实现 ``force_study_duration`` 来支持这个能力；
+    未实现的平台直接跳过（不报错），这样新增平台可以后补。
+    """
+    from api.platform import PlatformCapability
+
+    if not platform.supports(PlatformCapability.READ):
+        logger.info(f"平台 {platform.display_name} 不支持强制学习时长模式, 已跳过")
+        return
+
+    start = time.time()
+    pbar = tqdm(total=force_duration, desc="强制学习时长", unit_scale=True,
+                bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt}")
+    try:
         while time.time() - start < force_duration:
             if stop_event and stop_event.is_set():
                 logger.info("强制学习时长收到停止信号，提前退出")
                 break
+            _elapsed = int(time.time() - start)
+            try:
+                platform.force_study_duration(
+                    course, points, elapsed=_elapsed, total_duration=force_duration
+                )
+            except PlatformNotSupported:
+                logger.info(f"平台 {platform.display_name} 未实现强制学习时长, 已跳过")
+                return
+            except Exception as e:
+                logger.debug(f"强制学习时长上报异常(忽略): {e}")
 
-            now = time.time()
-            _elapsed = int(now - start)
-
-            # 每 _report_interval 秒向服务器上报一次
-            if now - _last_report >= _report_interval:
-                _last_report = now
-                point = points[idx % len(points)]
-                idx += 1
-
-                # --- 方法1: 访问章节页面（基础累计）---
-                try:
-                    _session.get(
-                        "https://mooc1.chaoxing.com/mooc-ans/mycourse/studentstudyAjax",
-                        params={
-                            "courseId": course["courseId"],
-                            "clazzid": course["clazzId"],
-                            "chapterId": point["id"],
-                            "cpi": course["cpi"],
-                            "verificationcode": "",
-                            "mooc2": 1,
-                        },
-                        timeout=5,
-                    )
-                except Exception:
-                    pass
-
-                # --- 方法2: 访问课程学习页面 ---
-                try:
-                    _session.get(
-                        "https://mooc1.chaoxing.com/visit/coursestudy",
-                        params={
-                            "courseId": course["courseId"],
-                            "clazzid": course["clazzId"],
-                            "chapterId": point["id"],
-                            "cpi": course["cpi"],
-                        },
-                        timeout=5,
-                    )
-                except Exception:
-                    pass
-
-                # --- 方法3: 如果有dtoken，使用多媒体日志API上报阅读时长 ---
-                if _dtoken:
-                    try:
-                        chaoxing._forced_document_log(
-                            _session, course, point,
-                            _dtoken, force_duration, _elapsed,
-                        )
-                    except Exception:
-                        pass
-
-                # --- 方法4: 尝试readv2心跳 ---
-                if idx % 2 == 0:
-                    try:
-                        chaoxing._forced_readv2_heartbeat(_session, course, point)
-                    except Exception:
-                        pass
-
-            # 每秒更新进度条 + 回调，UI不会看起来卡死
             pbar.n = min(_elapsed, force_duration)
             pbar.refresh()
             if progress_callback:
                 progress_callback(
                     current_chapter=f"⏳ 强制学习时长 {_elapsed}/{force_duration}s",
-                    completed_chapters=len(tasks),
-                    total_chapters=len(tasks),
+                    completed_chapters=total_tasks,
+                    total_chapters=total_tasks,
                 )
-
             time.sleep(1)
-
-        pbar.n = force_duration
-        pbar.refresh()
+    finally:
         pbar.close()
         logger.info(f"强制学习时长完成: {int(time.time() - start)}s")
-
-    tqdm.format_sizeof = _old_format_sizeof
-
-    return p.failed_tasks
 
 def filter_courses(all_course, course_list):
     """过滤要学习的课程"""
@@ -790,8 +756,10 @@ def run_study(common_config, tiku_config, notification_config,
     common_config["speed"] = min(gc.MAX_REPORT_SPEED, max(1.0, _speed))
     common_config["notopen_action"] = common_config.get("notopen_action", "retry")
 
-    # 初始化超星实例
-    chaoxing = init_chaoxing(common_config, tiku_config)
+    # 初始化平台实例（默认超星，由 common_config["platform"] 决定）
+    platform = init_platform(common_config, tiku_config)
+    platform_key = normalize_platform_key(common_config.get("platform", "chaoxing"))
+    platform_label = platform.display_name
 
     # 设置外部通知
     notification = Notification()
@@ -800,12 +768,19 @@ def run_study(common_config, tiku_config, notification_config,
     notification.init_notification()
 
     # 检查当前登录状态
-    _login_state = chaoxing.login(login_with_cookies=common_config.get("use_cookies", False))
-    if not _login_state["status"]:
-        raise LoginError(_login_state["msg"])
+    _login_state = platform.login(login_with_cookies=common_config.get("use_cookies", False))
+    # 兼容两种返回：历史字典 {"status":bool} 与平台层 LoginState
+    if hasattr(_login_state, "ok"):
+        _ok = bool(_login_state.ok)
+        _msg = _login_state.msg
+    else:
+        _ok = bool(_login_state.get("status")) if isinstance(_login_state, dict) else False
+        _msg = str(_login_state.get("msg", "")) if isinstance(_login_state, dict) else str(_login_state)
+    if not _ok:
+        raise LoginError(_msg)
 
     # 获取所有的课程列表
-    all_course = chaoxing.get_course_list()
+    all_course = platform.get_course_list()
 
     # 过滤要学习的课程
     course_task = filter_courses(all_course, common_config.get("course_list"))
@@ -826,7 +801,7 @@ def run_study(common_config, tiku_config, notification_config,
                 current_course=course["title"],
                 completed_courses=i,
             )
-        failed = process_course(chaoxing, course, common_config, stop_event=stop_event, progress_callback=progress_callback)
+        failed = process_course(platform, course, common_config, stop_event=stop_event, progress_callback=progress_callback)
         all_failed_tasks.extend(failed or [])
         if progress_callback:
             progress_callback(completed_courses=i + 1)
@@ -834,14 +809,14 @@ def run_study(common_config, tiku_config, notification_config,
     if stop_event and stop_event.is_set():
         # 用户主动停止: 不能误报"已完成"
         logger.warning("学习已按停止信号中止, 未完成的章节不会计入失败: {}", len(all_failed_tasks))
-        notification.send(f"chaoxing : 学习已停止, {len(all_failed_tasks)} 个章节未完成")
+        notification.send(f"{platform_label} : 学习已停止, {len(all_failed_tasks)} 个章节未完成")
     elif all_failed_tasks:
         failed_titles = ", ".join(t.point.get("title", "未知章节") for t in all_failed_tasks)
         logger.warning(f"课程学习结束, 但有 {len(all_failed_tasks)} 个章节未成功完成: {failed_titles}")
-        notification.send(f"chaoxing : 学习结束, {len(all_failed_tasks)} 个章节未成功: {failed_titles}")
+        notification.send(f"{platform_label} : 学习结束, {len(all_failed_tasks)} 个章节未成功: {failed_titles}")
     else:
         logger.info("所有课程学习任务已完成")
-        notification.send("chaoxing : 所有课程学习任务已完成")
+        notification.send(f"{platform_label} : 所有课程学习任务已完成")
 
 
 def main():
@@ -861,7 +836,7 @@ def main():
         logger.error(f"错误: {type(e).__name__}: {e}")
         logger.error(traceback.format_exc())
         try:
-            notification.send(f"chaoxing : 出现错误 {type(e).__name__}: {e}\n{traceback.format_exc()}")
+            notification.send(f"超级课程助手 : 出现错误 {type(e).__name__}: {e}\n{traceback.format_exc()}")
         except (Exception, NameError):
             pass  # 如果通知发送失败，忽略异常
         raise e

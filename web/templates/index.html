@@ -310,20 +310,30 @@
 
                 <!-- ========== 账号登录 ========== -->
                 <section id="view-auth" class="view-section d-none">
-                    <div class="pagehead"><div><h2>账号登录</h2><p>使用账号密码或 Cookie 登录超星账号</p></div></div>
+                    <div class="pagehead"><div><h2>账号登录</h2><p id="authPlatformHint">选择平台后使用账号密码或 Cookie 登录</p></div></div>
+                    <div class="card mb-2">
+                        <div class="body row-inline">
+                            <label class="field-lbl mb-0" for="platformSelect" style="min-width:64px">学习平台</label>
+                            <select class="inp" id="platformSelect" style="max-width:280px"><option value="chaoxing">超星学习通</option></select>
+                            <span class="badge bg-secondary" id="platformCaps"></span>
+                            <a class="soft small ms-auto d-none" id="platformHome" target="_blank" rel="noopener">前往平台 →</a>
+                        </div>
+                    </div>
                     <div class="grid-2">
                         <div class="card">
                             <div class="head"><svg><use href="#icon-user"/></svg>账号密码登录</div>
                             <form class="body" id="loginForm" autocomplete="on">
-                                <div class="field"><label class="field-lbl" for="loginUsername">手机号</label><input type="text" class="inp" id="loginUsername" name="username" autocomplete="username" placeholder="请输入手机号"></div>
-                                <div class="field"><label class="field-lbl" for="loginPassword">密码</label><input type="password" class="inp" id="loginPassword" name="password" autocomplete="current-password" placeholder="请输入密码"></div>
+                                <div class="field"><label class="field-lbl" for="loginUsername" id="loginUsernameLabel">手机号</label><input type="text" class="inp" id="loginUsername" name="username" autocomplete="username" placeholder="请输入手机号"></div>
+                                <div class="field"><label class="field-lbl" for="loginPassword" id="loginPasswordLabel">密码</label><input type="password" class="inp" id="loginPassword" name="password" autocomplete="current-password" placeholder="请输入密码"></div>
+                                <!-- 平台私有附加字段（如智慧树的学号/学校代码），由前端按 /api/platforms 动态渲染 -->
+                                <div id="platformExtraFields"></div>
                                 <button class="btn go full" id="btnLogin" type="submit"><svg><use href="#icon-key"/></svg>登录</button>
                             </form>
                         </div>
                         <div class="card">
                             <div class="head"><svg><use href="#icon-book"/></svg>Cookie 登录</div>
                             <div class="body">
-                                <div class="field"><label class="field-lbl" for="loginCookies">Cookie 字符串</label><textarea class="inp" id="loginCookies" rows="4" placeholder="key=value; key2=value2"></textarea></div>
+                                <div class="field"><label class="field-lbl" for="loginCookies" id="loginCookiesLabel">Cookie 字符串</label><textarea class="inp" id="loginCookies" rows="4" placeholder="key=value; key2=value2"></textarea></div>
                                 <button class="btn warn full" id="btnCookieLogin"><svg><use href="#icon-check"/></svg>Cookie 登录</button>
                             </div>
                         </div>
@@ -333,6 +343,7 @@
                             <span class="muted-label">登录状态</span>
                             <span id="authStatus" class="badge bg-danger">未登录</span>
                             <span id="authUid" class="soft small"></span>
+                            <span id="authPlatform" class="badge bg-secondary d-none"></span>
                             <button class="btn-pill danger ms-auto" id="btnLogout"><svg><use href="#icon-logout"/></svg>退出登录</button>
                         </div>
                     </div>

@@ -268,24 +268,135 @@ async function saveConfig() {
     }
 }
 
+/* ---------- 平台（多平台支持） ---------- */
+// 平台列表由 /api/platforms 动态下发，前端不写死任何平台名。
+// 新增一个平台只需要在后端注册 adapter，这里无需改动。
+let platformCache = [];
+
+function currentPlatformKey() {
+    return $('platformSelect')?.value || 'chaoxing';
+}
+
+function currentPlatformMeta() {
+    return platformCache.find((p) => p.key === currentPlatformKey()) || null;
+}
+
+async function loadPlatforms() {
+    const result = await apiFetch('/api/platforms');
+    if (result.status !== 'ok' || !Array.isArray(result.platforms)) return;
+    platformCache = result.platforms;
+    const select = $('platformSelect');
+    if (!select) return;
+    select.innerHTML = platformCache
+        .map((p) => `<option value="${escapeHtml(p.key)}">${escapeHtml(p.name)}</option>`)
+        .join('');
+    if (result.selected) select.value = result.selected;
+    applyPlatformMeta();
+}
+
+// 按当前平台刷新登录表单的文案、占位符、附加字段与 Cookie 开关
+function applyPlatformMeta() {
+    const meta = currentPlatformMeta();
+    if (!meta) return;
+    const setText = (id, text) => { const el = $(id); if (el) el.textContent = text; };
+    const setAttr = (id, attr, text) => { const el = $(id); if (el) el.setAttribute(attr, text || ''); };
+
+    setText('loginUsernameLabel', meta.account_hint || '账号');
+    setText('loginPasswordLabel', meta.password_hint || '密码');
+    setAttr('loginUsername', 'placeholder', `请输入${meta.account_hint || '账号'}`);
+    setAttr('loginPassword', 'placeholder', `请输入${meta.password_hint || '密码'}`);
+    setAttr('loginCookies', 'placeholder', meta.cookie_hint || 'key=value; key2=value2');
+
+    const hint = $('authPlatformHint');
+    if (hint) hint.textContent = `使用账号密码或 Cookie 登录${meta.name}${meta.notes ? ' · ' + meta.notes : ''}`;
+
+    // 能力徽标：让用户一眼看出该平台支持哪些任务类型
+    const capNames = {
+        video: '视频', audio: '音频', document: '文档', read: '阅读',
+        work: '作业', live: '直播', sign: '签到',
+    };
+    const caps = (meta.capabilities || []).filter((c) => capNames[c]).map((c) => capNames[c]);
+    const capsEl = $('platformCaps');
+    if (capsEl) capsEl.textContent = caps.length ? '支持: ' + caps.join('/') : '';
+
+    const homeEl = $('platformHome');
+    if (homeEl) {
+        if (meta.home) { homeEl.href = meta.home; homeEl.classList.remove('d-none'); }
+        else { homeEl.classList.add('d-none'); }
+    }
+
+    // 不支持 Cookie / 密码登录的平台直接隐藏对应卡片，避免用户做无效尝试
+    const cookieBtn = $('btnCookieLogin');
+    if (cookieBtn) cookieBtn.closest('.card').classList.toggle('d-none', !meta.supports_cookie_login);
+    const loginForm = $('loginForm');
+    if (loginForm) loginForm.closest('.card').classList.toggle('d-none', !meta.supports_password_login);
+
+    renderPlatformExtraFields(meta);
+}
+
+// 渲染平台私有登录字段（由 adapter 的 PlatformMeta.config_fields 声明）
+function renderPlatformExtraFields(meta) {
+    const host = $('platformExtraFields');
+    if (!host) return;
+    const fields = meta.config_fields || [];
+    host.innerHTML = fields.map((f) => {
+        const id = `platformField_${f.key}`;
+        const label = escapeHtml(f.label || f.key);
+        if (f.type === 'select') {
+            const opts = (f.options || []).map((o) => {
+                const value = typeof o === 'string' ? o : o.value;
+                const text = typeof o === 'string' ? o : (o.label || o.value);
+                return `<option value="${escapeHtml(value)}">${escapeHtml(text)}</option>`;
+            }).join('');
+            return `<div class="field"><label class="field-lbl" for="${id}">${label}</label>`
+                + `<select class="inp" id="${id}" data-field-key="${escapeHtml(f.key)}">${opts}</select></div>`;
+        }
+        return `<div class="field"><label class="field-lbl" for="${id}">${label}</label>`
+            + `<input type="text" class="inp" id="${id}" data-field-key="${escapeHtml(f.key)}"`
+            + ` placeholder="${escapeHtml(f.placeholder || '')}"></div>`;
+    }).join('');
+}
+
+function collectPlatformExtras() {
+    const extras = {};
+    document.querySelectorAll('#platformExtraFields [data-field-key]').forEach((el) => {
+        const v = (el.value || '').trim();
+        if (v) extras[el.dataset.fieldKey] = v;
+    });
+    return extras;
+}
+
+async function handlePlatformChange() {
+    applyPlatformMeta();
+    await apiFetch('/api/platform/select', { method: 'POST', body: { platform: currentPlatformKey() } });
+    await checkLoginStatus();
+}
+
 /* ---------- 登录 ---------- */
 async function checkLoginStatus() {
     const result = await apiFetch('/api/login/status');
     const badge = $('loginStatusBadge');
     const authStatus = $('authStatus');
     const authUid = $('authUid');
+    const authPlatform = $('authPlatform');
     if (!badge || !authStatus || !authUid) return;
     if (result.logged_in) {
         const label = result.username || `UID: ${result.uid}`;
         badge.innerHTML = `<span class="badge bg-success">已登录 ${escapeHtml(label)}</span>`;
         authStatus.textContent = '已登录';
         authStatus.className = 'badge bg-success';
-        authUid.textContent = `UID: ${result.uid}`;
+        authUid.textContent = result.uid ? `UID: ${result.uid}` : '';
+        if (authPlatform) {
+            const pname = result.platform_name || result.platform || '';
+            authPlatform.textContent = pname;
+            authPlatform.classList.toggle('d-none', !pname);
+        }
     } else {
         badge.innerHTML = '<span class="badge bg-danger">未登录</span>';
         authStatus.textContent = '未登录';
         authStatus.className = 'badge bg-danger';
         authUid.textContent = '';
+        if (authPlatform) authPlatform.classList.add('d-none');
     }
 }
 
@@ -300,7 +411,15 @@ async function handleLoginSubmit(e) {
     const btn = $('btnLogin');
     setButtonLoading(btn, true, '登录中...');
     try {
-        const result = await apiFetch('/api/login', { method: 'POST', body: { username, password } });
+        const result = await apiFetch('/api/login', {
+            method: 'POST',
+            body: {
+                username,
+                password,
+                platform: currentPlatformKey(),
+                extras: collectPlatformExtras(),
+            },
+        });
         if (result.status) {
             showToast('登录成功', 'success');
             await checkLoginStatus();
@@ -322,7 +441,10 @@ async function handleCookieLogin() {
     const btn = $('btnCookieLogin');
     setButtonLoading(btn, true, '登录中...');
     try {
-        const result = await apiFetch('/api/login/cookies', { method: 'POST', body: { cookies } });
+        const result = await apiFetch('/api/login/cookies', {
+            method: 'POST',
+            body: { cookies, platform: currentPlatformKey() },
+        });
         if (result.status) {
             showToast('Cookie 登录成功', 'success');
             await checkLoginStatus();
@@ -829,6 +951,7 @@ function init() {
     });
 
     $('btnSaveConfig')?.addEventListener('click', saveConfig);
+    $('platformSelect')?.addEventListener('change', handlePlatformChange);
     $('loginForm')?.addEventListener('submit', handleLoginSubmit);
     $('btnCookieLogin')?.addEventListener('click', handleCookieLogin);
     $('btnLogout')?.addEventListener('click', handleLogout);
@@ -863,7 +986,8 @@ function init() {
     });
 
     connectLogStream();
-    checkLoginStatus();
+    // 先拉取平台列表再渲染登录态：applyPlatformMeta 依赖 platformCache
+    loadPlatforms().then(checkLoginStatus);
     switchView(localStorage.getItem('superstar.activeView') || 'dashboard');
 }
 

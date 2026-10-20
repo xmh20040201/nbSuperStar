@@ -1,47 +1,32 @@
 import time
-from urllib.parse import quote
 
 from flask import Blueprint, jsonify, request
 
 from api.logger import logger
+from api.platform import PlatformCapability, PlatformNotSupported
 from web.routes.auth import get_chaoxing
 from web.services.config_service import load_config, save_config
 
 courses_bp = Blueprint("courses", __name__)
 
 
-def _build_reading_url(course, point, enc=""):
-    refer_url = (
-        "https://mooc1.chaoxing.com/mycourse/studentstudy"
-        f"?chapterId={point['id']}"
-        f"&courseId={course['courseId']}"
-        f"&clazzid={course['clazzId']}"
-        f"&cpi={course['cpi']}"
-        f"&enc={enc}"
-        "&mooc2=1"
-        "&hidetype=0"
-    )
-    return (
-        "https://mooc1.chaoxing.com/mycourse/transfer"
-        f"?moocId={course['courseId']}"
-        f"&clazzid={course['clazzId']}"
-        f"&linkTime={int(time.time() * 1000)}"
-        f"&ut=s&refer={quote(refer_url, safe='')}"
-    )
-
-
 @courses_bp.route("/api/courses", methods=["GET"])
 def list_courses():
-    cx = get_chaoxing()
-    if cx is None:
+    platform = get_chaoxing()
+    if platform is None:
         return jsonify({"status": "error", "msg": "请先登录"}), 401
 
     try:
-        courses = cx.get_course_list()
+        courses = platform.get_course_list()
         cfg = load_config()
         selected = cfg.get("common", {}).get("course_list", "")
         selected_ids = [item.strip() for item in selected.split(",") if item.strip()]
-        return jsonify({"status": "ok", "courses": courses, "selected_ids": selected_ids})
+        return jsonify({
+            "status": "ok",
+            "courses": courses,
+            "selected_ids": selected_ids,
+            "platform": getattr(platform, "platform_key", getattr(platform, "key", "")),
+        })
     except Exception as e:
         logger.exception(f"获取课程列表失败: {e}")
         return jsonify({"status": "error", "msg": f"获取课程列表失败: {e}"}), 500
@@ -68,9 +53,16 @@ def select_courses():
 
 @courses_bp.route("/api/reading/links", methods=["GET"])
 def reading_links():
-    cx = get_chaoxing()
-    if cx is None:
+    platform = get_chaoxing()
+    if platform is None:
         return jsonify({"status": "error", "msg": "请先登录"}), 401
+
+    # 阅读链接是平台私有能力：未实现时给出明确提示而不是 500
+    if not platform.supports(PlatformCapability.READING_LINK):
+        return jsonify({
+            "status": "error",
+            "msg": f"当前平台（{platform.display_name}）暂不支持生成阅读链接",
+        }), 400
 
     try:
         cfg = load_config()
@@ -82,7 +74,7 @@ def reading_links():
                 "msg": "请先在课程列表勾选课程并点击“保存选择”，再生成阅读链接。",
             }), 400
 
-        all_courses = cx.get_course_list()
+        all_courses = platform.get_course_list()
         courses = [
             course for course in all_courses
             if str(course["courseId"]) in selected_ids
@@ -91,9 +83,7 @@ def reading_links():
         items = []
         scanned = 0
         for course in courses:
-            course_point = cx.get_course_point(
-                course["courseId"], course["clazzId"], course["cpi"]
-            )
+            course_point = platform.get_course_point(course)
             course_enc = course_point.get("enc", "")
             for point in course_point.get("points", []):
                 scanned += 1
@@ -107,7 +97,8 @@ def reading_links():
                     "chapter_title": title,
                     "reading_title": title,
                     "finished": bool(point.get("has_finished")),
-                    "url": _build_reading_url(course, point, course_enc),
+                    # 链接构造由平台 adapter 负责，web 层不再拼超星 URL
+                    "url": platform.get_reading_link(course, point, course_enc),
                 })
 
         return jsonify({
@@ -116,6 +107,8 @@ def reading_links():
             "scanned": scanned,
             "items": items,
         })
+    except PlatformNotSupported as e:
+        return jsonify({"status": "error", "msg": str(e)}), 400
     except Exception as e:
         logger.exception(f"生成阅读链接失败: {e}")
         return jsonify({"status": "error", "msg": f"生成阅读链接失败: {e}"}), 500

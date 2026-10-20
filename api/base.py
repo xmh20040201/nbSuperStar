@@ -27,7 +27,21 @@ from api.decode import (
     decode_course_folder,
     decode_questions_info,
 )
-from api.exceptions import MaxRetryExceeded
+from api.exceptions import LoginError, MaxRetryExceeded
+# 平台抽象层：Account / RateLimiter / StudyResult 的权威定义已迁到
+# api/platform/contract.py 与 api/platform/account.py，这里 re-export
+# 是为了兼容既有 `from api.base import Account, Chaoxing, StudyResult` 的写法。
+from api.platform.contract import (
+    ChapterResult,
+    Platform,
+    PlatformCapability,
+    PlatformMeta,
+    RateLimiter,
+    StudyResult,
+    normalize_course,
+    normalize_point,
+)
+from api.platform.account import Account
 
 
 def get_timestamp():
@@ -35,19 +49,35 @@ def get_timestamp():
 
 
 class SessionManager:
-    _instance = None
+    """平台隔离的会话管理器。
+
+    历史实现是全局单例，多平台接入后会互相污染 cookie。现在按
+    ``platform_key`` 分别持有 session：``get_session()`` 默认取当前
+    活动平台（chaoxing），因此既有调用点无需改动即保持原行为。
+    """
+
+    _instances: dict[str, "SessionManager"] = {}
     _init_lock = threading.Lock()
+    _active_key = "chaoxing"
 
-    def __new__(cls, *args, **kwargs):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
+    def __new__(cls, platform_key: str = "chaoxing", *args, **kwargs):
+        key = (platform_key or "chaoxing").lower()
+        if key not in cls._instances:
+            instance = super().__new__(cls)
+            instance._platform_key = key
+            instance._initialized = False
+            cls._instances[key] = instance
+        return cls._instances[key]
 
-    def __init__(self):
+    def __init__(self, platform_key: str = "chaoxing", create: bool = True):
+        key = (platform_key or "chaoxing").lower()
         if getattr(self, "_initialized", False):
             return
+        if not create:
+            # 惰性占位：避免 import 阶段就建连接
+            return
 
-        with self._init_lock:
+        with self.__class__._init_lock:
             if getattr(self, "_initialized", False):
                 return
             self._session = requests.Session()
@@ -58,75 +88,42 @@ class SessionManager:
             # self._session.verify=False
             self._session.headers.clear()
             self._session.headers.update(gc.HEADERS)
-            self._session.cookies.update(use_cookies())
+            self._session.cookies.update(use_cookies(key))
             self._initialized = True
+
+    # -- 新增：按平台取会话 -------------------------------------------
+    @classmethod
+    def for_platform(cls, platform_key: str) -> "SessionManager":
+        """取（必要时创建）指定平台的会话管理器。"""
+        key = (platform_key or "chaoxing").lower()
+        instance = cls(key)
+        if not getattr(instance, "_initialized", False):
+            instance.__init__(key, create=True)
+        return instance
+
+    @classmethod
+    def set_active_platform(cls, platform_key: str) -> None:
+        """切换 get_session() 默认指向的平台。"""
+        cls._active_key = (platform_key or "chaoxing").lower()
 
     @classmethod
     def get_instance(cls) -> Self:
-        return cls()
+        key = cls._active_key
+        instance = cls(key)
+        if not getattr(instance, "_initialized", False):
+            instance.__init__(key, create=True)
+        return instance
 
     @classmethod
-    def get_session(cls) -> requests.Session:
-        instance = cls.get_instance()
-        return instance._session
+    def get_session(cls, platform_key: str | None = None) -> requests.Session:
+        if platform_key is None:
+            return cls.get_instance()._session
+        return cls.for_platform(platform_key)._session
 
     @classmethod
-    def update_cookies(cls):
-        cls.get_instance()._session.cookies.update(use_cookies())
-
-
-class Account:
-    username = None
-    password = None
-    last_login = None
-    isSuccess = None
-
-    def __init__(self, _username, _password):
-        self.username = _username
-        self.password = _password
-
-
-class RateLimiter:
-    def __init__(self, call_interval):
-        self.last_call = time.time()
-        self.lock = threading.Lock()
-        self.call_interval = call_interval
-        # 全局冷却截止时间：一旦触发风控(403)，所有线程共享同一冷却窗口，
-        # 避免并发线程继续撞击风控把封禁范围扩大
-        self._cooldown_until = 0.0
-
-    def cooldown(self, seconds: float):
-        """登记一个全局冷却窗口，期间所有请求都会被阻塞。"""
-        with self.lock:
-            until = time.time() + max(0.0, float(seconds))
-            if until > self._cooldown_until:
-                self._cooldown_until = until
-
-    def limit_rate(self, random_time=False, random_min=0.0, random_max=1.0):
-        with self.lock:
-            now = time.time()
-            # 冷却窗口优先：等待到冷却结束（锁外 sleep，避免阻塞其他线程登记）
-            cool_wait = max(self._cooldown_until - now, 0)
-            base_wait = max(self.last_call + self.call_interval - now, 0)
-            extra_wait = random.uniform(random_min, random_max) if random_time else 0
-            call_wait = max(base_wait, cool_wait) + extra_wait
-            self.last_call = now + call_wait
-
-        if call_wait > 0:
-            time.sleep(call_wait)
-
-
-class StudyResult(Enum):
-    SUCCESS = 0
-    FORBIDDEN = 1  # 403
-    ERROR = 2
-    TIMEOUT = 3
-
-    def is_success(self):
-        return self == StudyResult.SUCCESS
-
-    def is_failure(self):
-        return self != StudyResult.SUCCESS
+    def update_cookies(cls, platform_key: str | None = None):
+        key = platform_key or cls._active_key
+        cls.for_platform(key)._session.cookies.update(use_cookies(key))
 
 
 class SignType(IntEnum):
@@ -144,21 +141,69 @@ class ActivityType(IntEnum):
     SIGNIN = 2
 
 
-class Chaoxing:
+class Chaoxing(Platform):
+    """超星/学习通平台实现。
+
+    继承 ``api.platform.contract.Platform`` 后，它就自动被识别为一个
+    平台 adapter；同时保留全部历史方法名与返回值，旧代码零改动可用。
+    """
+
+    key = "chaoxing"
+    meta = PlatformMeta(
+        key="chaoxing",
+        name="超星学习通",
+        home="https://i.chaoxing.com",
+        account_hint="手机号",
+        password_hint="密码",
+        cookie_hint="超星 Cookie 字符串（key=value; key2=value2）",
+        notes="内置视频/音频/文档/阅读/作业/直播/自动签到全量支持",
+    )
+
     def __init__(self, account: Account = None, tiku: Tiku = None, **kwargs):
         self.account = account
         self.cipher = AESCipher()
         self.tiku = tiku
         self.kwargs = kwargs
+        self.config = kwargs.pop("config", None) or {}
+        # 平台身份：cookie 落盘路径、SessionManager 都以它区分
+        self.platform_key = kwargs.pop("platform_key", None) or getattr(
+            self, "key", "chaoxing"
+        )
         self.rollback_times = 0
         self.rate_limiter = RateLimiter(0.3)  # 其他接口速率限制比较松
         self.video_log_limiter = RateLimiter(1.5)  # 上报进度极其容易卡验证码，限制1.5s一次
         self.read_duration = kwargs.get("read_duration", 300)  # 阅读任务默认模拟时长（秒）
+        # 让超星会话成为默认活动会话（历史行为：SessionManager 全局单例）
+        SessionManager.set_active_platform(self.platform_key)
+
+    # -- Platform 契约 ---------------------------------------------------
+    def _create_session(self):
+        """超星使用 SessionManager 全局会话，不单独建 session。"""
+        return SessionManager.get_session(self.platform_key)
+
+    def _login_with_password(self):
+        return self.login(login_with_cookies=False)
+
+    def _login_with_cookies(self):
+        return self.login(login_with_cookies=True)
+
+    def validate_session(self) -> bool:
+        return self._validate_cookie_session()
 
     def login(self, login_with_cookies=False):
+        try:
+            return self._do_login(login_with_cookies)
+        except LoginError:
+            raise
+        except Exception as e:
+            if login_with_cookies:
+                raise LoginError(f"Cookie 登录异常: {e}") from e
+            raise LoginError(f"账号密码登录异常: {e}") from e
+
+    def _do_login(self, login_with_cookies=False):
         if login_with_cookies:
             logger.info("Logging in with cookies")
-            SessionManager.update_cookies()
+            SessionManager.update_cookies(self.platform_key)
             logger.debug(f"Logged in with cookies: {SessionManager.get_instance()._session.cookies}")
             if not self._validate_cookie_session():
                 logger.warning("Cookie 登录校验失败，尝试使用账号密码重新登录")
@@ -184,8 +229,8 @@ class Chaoxing:
         logger.trace("正在尝试登录...")
         resp = _session.post(_url, headers=gc.HEADERS, data=_data)
         if resp and resp.json()["status"] == True:
-            save_cookies(_session)
-            SessionManager.update_cookies()
+            save_cookies(_session, self.platform_key)
+            SessionManager.update_cookies(self.platform_key)
             logger.info("登录成功...")
             return {"status": True, "msg": "登录成功"}
         else:
@@ -231,7 +276,7 @@ class Chaoxing:
         raise ValueError("Cannot get uid !")
 
     def get_course_list(self):
-        _session = SessionManager.get_session()
+        _session = SessionManager.get_session(self.platform_key)
         _url = "https://mooc2-ans.chaoxing.com/mooc2-ans/visit/courselistdata"
         _data = {"courseType": 1, "courseFolderId": 0, "query": "", "superstarClass": 0}
         logger.trace("正在读取所有的课程列表...")
@@ -258,7 +303,8 @@ class Chaoxing:
             }
             _resp = _session.post(_url, data=_data)
             course_list += decode_course_list(_resp.text)
-        return course_list
+        # 补齐规范化字段（platform / 字符串化 ID），供多平台通用流程使用
+        return [normalize_course(c, self.platform_key) for c in course_list]
 
     def get_activity_list(self, course: dict) -> list[dict]:
         s = SessionManager.get_session()
@@ -341,8 +387,18 @@ class Chaoxing:
         return resp_txt
 
 
-    def get_course_point(self, _courseid, _clazzid, _cpi):
-        _session = SessionManager.get_session()
+    def get_course_point(self, _courseid=None, _clazzid=None, _cpi=None, course=None):
+        """读取课程章节。
+
+        兼容两种调用方式：
+        * 旧写法 ``get_course_point(courseid, clazzid, cpi)``（web/主流程历史调用）
+        * 新写法 ``get_course_point(course)``（Platform 契约，参数是课程字典）
+        """
+        if course is not None:
+            _courseid = _courseid or course.get("courseId")
+            _clazzid = _clazzid or course.get("clazzId")
+            _cpi = _cpi or course.get("cpi")
+        _session = SessionManager.get_session(self.platform_key)
         _url = f"https://mooc2-ans.chaoxing.com/mooc2-ans/mycourse/studentcourse?courseid={_courseid}&clazzid={_clazzid}&cpi={_cpi}&ut=s"
         logger.trace("URL: " + _url)
         logger.trace("开始读取课程所有章节...")
@@ -350,10 +406,82 @@ class Chaoxing:
 
         logger.trace(f"原始章节列表内容:\n{_resp.text}")
         logger.info("课程章节读取成功...")
-        return decode_course_point(_resp.text)
+        result = decode_course_point(_resp.text)
+        return {
+            **result,
+            "points": [normalize_point(p) for p in result.get("points", [])],
+        }
+
+    def process_job(self, course: dict, job: dict, job_info: dict,
+                    speed: float = 1.0, stop_event=None) -> StudyResult:
+        """执行单个任务点（Platform 契约）。
+
+        从 main.py 的 ``process_job`` 下沉而来，这样每个平台可以自由决定
+        "一个任务点需要走几段请求"，而主流程只负责调度和重试。
+        """
+        job_type = job.get("type")
+        # 视频任务
+        if job_type == "video":
+            logger.trace(f"识别到视频任务, 任务章节: {course['title']} 任务ID: {job['jobid']}")
+            video_result = self.study_video(
+                course, job, job_info, _speed=speed, _type="Video",
+                stop_event=stop_event,
+            )
+            if video_result == StudyResult.FORBIDDEN:
+                # 进度上报接口403与媒体类型无关, 直接判定失败, 不再尝试音频
+                logger.warning("进度上报被服务端拒绝(403), 任务跳过 -> 任务章节: {} 任务ID: {}",
+                               course["title"], job["jobid"])
+                return video_result
+            if video_result.is_failure():
+                logger.warning(
+                    f"视频任务未通过 -> 任务章节: {course['title']} 任务ID: {job['jobid']}, 已跳过"
+                )
+            return video_result
+        # 文档任务
+        if job_type == "document":
+            logger.trace(f"识别到文档任务, 任务章节: {course['title']} 任务ID: {job['jobid']}")
+            return self.study_document(course, job)
+        # 章节检测 / 作业
+        if job_type in ("workid", "work"):
+            logger.trace(f"识别到章节检测/作业任务, 任务章节: {course['title']}")
+            return self.study_work(course, job, job_info, stop_event=stop_event)
+        # 阅读任务
+        if job_type == "read":
+            logger.trace(f"识别到阅读任务, 任务章节: {course['title']}")
+            return self.study_read(course, job, job_info, _speed=speed, stop_event=stop_event)
+        # 直播任务
+        if job_type == "live":
+            logger.trace(f"识别到直播任务, 任务章节: {course['title']} 任务ID: {job['jobid']}")
+            try:
+                from api.live import Live
+                from api.live_process import LiveProcessor
+                defaults = {
+                    "userid": self.get_uid(),
+                    "clazzId": course.get("clazzId"),
+                    "knowledgeid": job_info.get("knowledgeid"),
+                }
+                live = Live(
+                    attachment=job,
+                    defaults=defaults,
+                    course_id=course.get("courseId"),
+                )
+                thread = threading.Thread(
+                    target=LiveProcessor.run_live,
+                    args=(live, speed),
+                    daemon=True,
+                )
+                thread.start()
+                thread.join()
+                return StudyResult.SUCCESS
+            except Exception as e:
+                logger.error(f"处理直播任务时出错: {str(e)}")
+                return StudyResult.ERROR
+
+        logger.error(f"未知任务类型: {job_type}")
+        return StudyResult.ERROR
 
     def get_job_list(self, course: dict, point: dict) -> tuple[list[dict], dict]:
-        _session = SessionManager.get_session()
+        _session = SessionManager.get_session(self.platform_key)
         self.rate_limiter.limit_rate()
         job_list = []
         job_info = {}

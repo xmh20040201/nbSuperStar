@@ -158,6 +158,11 @@ svg{flex:0 0 auto}
 textarea.inp{height:auto;padding:10px 12px;resize:vertical}
 .inp::placeholder{color:#64748b}
 .inp:focus{border-color:rgba(99,102,241,.6);box-shadow:0 0 0 3px rgba(56,189,248,.16)}
+/* 平台选择下拉：沿用 .inp 外观，但去掉浏览器默认样式 */
+select.inp{-webkit-appearance:none;appearance:none;padding-right:32px;cursor:pointer;
+  background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 10px center;background-size:14px}
+select.inp option{background:#0f172a;color:var(--text)}
 .chk{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--soft);cursor:pointer;user-select:none}
 .chk input{width:16px;height:16px;accent-color:var(--indigo);cursor:pointer}
 
