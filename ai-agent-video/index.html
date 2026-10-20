@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1920,height=1080">
+<title>AI Agent</title>
+
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0a0a; overflow: hidden; font-family: "Noto Sans SC", sans-serif; }
+#canvas { width: 1920px; height: 1080px; position: relative; overflow: hidden; background: radial-gradient(ellipse at 30% 50%, rgba(124,58,237,0.08) 0%, transparent 60%), radial-gradient(ellipse at 70% 30%, rgba(6,182,212,0.06) 0%, transparent 50%), #0a0a0a; }
+.grid-bg { position: absolute; inset: 0; z-index: 0; opacity: 0.04; background-image: linear-gradient(rgba(124,58,237,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(124,58,237,0.3) 1px, transparent 1px); background-size: 60px 60px; }
+#particles { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.orb { position: absolute; border-radius: 50%; filter: blur(80px); z-index: 0; opacity: 0; }
+.orb-1 { width: 400px; height: 400px; background: rgba(124,58,237,0.15); top: -100px; left: -100px; }
+.orb-2 { width: 300px; height: 300px; background: rgba(6,182,212,0.12); bottom: -50px; right: -50px; }
+.orb-3 { width: 250px; height: 250px; background: rgba(124,58,237,0.1); top: 400px; right: 300px; }
+.scene { position: absolute; inset: 0; z-index: 10; opacity: 0; visibility: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 80px 120px; }
+.title-mega { font-family: "Orbitron", sans-serif; font-weight: 900; font-size: 120px; color: #f0f0f0; letter-spacing: 0.08em; text-transform: uppercase; text-shadow: 0 0 60px rgba(124,58,237,0.5), 0 0 120px rgba(124,58,237,0.2); }
+.title-section { font-family: "Noto Sans SC", sans-serif; font-weight: 900; font-size: 56px; color: #f0f0f0; letter-spacing: 0.02em; text-shadow: 0 0 30px rgba(6,182,212,0.3); }
+.subtitle { font-family: "Noto Sans SC", sans-serif; font-weight: 400; font-size: 32px; color: rgba(240,240,240,0.7); letter-spacing: 0.1em; margin-top: 20px; }
+.body-text { font-family: "Noto Sans SC", sans-serif; font-weight: 400; font-size: 28px; color: rgba(240,240,240,0.85); line-height: 1.8; max-width: 1400px; }
+.accent-purple { color: #a78bfa; } .accent-cyan { color: #22d3ee; } .accent-bright { color: #c084fc; }
+.card { background: rgba(255,255,255,0.03); border: 1px solid rgba(124,58,237,0.2); border-radius: 16px; padding: 40px; }
+.card-glow { box-shadow: 0 0 30px rgba(124,58,237,0.1), inset 0 0 30px rgba(124,58,237,0.03); }
+.badge { display: inline-flex; align-items: center; gap: 8px; padding: 8px 20px; border-radius: 999px; font-size: 18px; font-weight: 500; background: rgba(124,58,237,0.15); color: #a78bfa; border: 1px solid rgba(124,58,237,0.3); }
+.loop-container { position: relative; width: 600px; height: 600px; }
+.loop-node { position: absolute; width: 160px; height: 160px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-direction: column; font-weight: 700; font-size: 24px; color: #f0f0f0; border: 2px solid rgba(124,58,237,0.4); background: rgba(124,58,237,0.08); }
+.loop-node .icon { font-size: 40px; margin-bottom: 8px; }
+.timeline-bar { position: absolute; bottom: 0; left: 0; height: 4px; z-index: 100; background: linear-gradient(90deg, #7c3aed, #06b6d4); box-shadow: 0 0 20px rgba(124,58,237,0.5); }
+.timer { position: absolute; top: 30px; right: 40px; z-index: 100; font-family: "JetBrains Mono", monospace; font-size: 20px; color: rgba(240,240,240,0.3); letter-spacing: 0.1em; }
+.heading-line { width: 80px; height: 3px; margin: 16px auto 0; background: linear-gradient(90deg, #7c3aed, #06b6d4); border-radius: 2px; box-shadow: 0 0 10px rgba(124,58,237,0.5); }
+.compare-row { display: flex; gap: 40px; align-items: stretch; }
+.compare-col { flex: 1; padding: 30px; border-radius: 16px; }
+.compare-col.old { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); }
+.compare-col.new { background: rgba(124,58,237,0.05); border: 1px solid rgba(124,58,237,0.25); }
+.compare-item { display: flex; align-items: center; gap: 16px; padding: 14px 0; font-size: 24px; color: rgba(240,240,240,0.8); border-bottom: 1px solid rgba(255,255,255,0.05); } .compare-item:last-child { border-bottom: none; } .compare-icon { font-size: 28px; width: 40px; text-align: center; }
+.examples-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 30px; width: 100%; max-width: 1600px; }
+.example-card { padding: 36px; border-radius: 20px; background: rgba(255,255,255,0.02); border: 1px solid rgba(124,58,237,0.15); } .example-card .icon { font-size: 48px; margin-bottom: 16px; } .example-card h3 { font-size: 26px; font-weight: 700; color: #f0f0f0; margin-bottom: 12px; } .example-card p { font-size: 20px; color: rgba(240,240,240,0.6); line-height: 1.6; }
+.tools-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; width: 100%; max-width: 1500px; }
+.tool-item { padding: 28px; border-radius: 14px; text-align: center; background: rgba(255,255,255,0.02); border: 1px solid rgba(6,182,212,0.15); } .tool-item .icon { font-size: 40px; margin-bottom: 12px; } .tool-item h4 { font-size: 22px; font-weight: 600; color: #f0f0f0; margin-bottom: 8px; } .tool-item p { font-size: 16px; color: rgba(240,240,240,0.5); }
+.memory-stack { display: flex; flex-direction: column; gap: 16px; max-width: 800px; width: 100%; }
+.memory-layer { display: flex; align-items: center; gap: 24px; padding: 20px 30px; border-radius: 12px; background: rgba(255,255,255,0.02); border-left: 3px solid; } .memory-layer.short { border-left-color: #22d3ee; } .memory-layer.long { border-left-color: #a78bfa; } .memory-layer.working { border-left-color: #f59e0b; } .memory-layer h4 { font-size: 22px; font-weight: 700; color: #f0f0f0; min-width: 140px; } .memory-layer p { font-size: 18px; color: rgba(240,240,240,0.6); }
+.future-items { display: flex; flex-direction: column; gap: 28px; max-width: 1200px; width: 100%; }
+.future-item { display: flex; align-items: flex-start; gap: 24px; padding: 20px 0; } .future-num { font-family: "Orbitron", sans-serif; font-weight: 900; font-size: 48px; color: rgba(124,58,237,0.3); min-width: 80px; text-align: right; } .future-item h3 { font-size: 28px; font-weight: 700; color: #f0f0f0; margin-bottom: 8px; } .future-item p { font-size: 20px; color: rgba(240,240,240,0.6); line-height: 1.6; }
+.scene-tag { font-family: "JetBrains Mono", monospace; font-size: 14px; color: rgba(240,240,240,0.2); position: absolute; top: 30px; left: 40px; z-index: 50; letter-spacing: 0.15em; text-transform: uppercase; }
+</style>
+</head>
+<body>
+<div id="canvas">
+  <div class="grid-bg"></div>
+  <canvas id="particles"></canvas>
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+  <div class="timeline-bar" id="timelineBar" style="width:0%"></div>
+  <div class="timer" id="timer">00:00</div>
+      <div class="badge" id="s1-badge">THE NEXT EVOLUTION</div>
+      <h1 class="title-mega" id="s1-title">AI AGENT</h1>
+      <div style="display:flex;align-items:center;gap:20px;">
+        <div style="width:60px;height:1px;background:linear-gradient(90deg,transparent,rgba(124,58,237,0.5))"></div>
+        <span class="subtitle" id="s1-subtitle">智能体：人工智能的下一个范式</span>
+        <div style="width:60px;height:1px;background:linear-gradient(90deg,rgba(124,58,237,0.5),transparent)"></div>
+      </div>
+    </div>
+  </div>
+  <!-- Scene 2: What is AI Agent -->
+  <div class="scene" id="scene2">
+    <div class="scene-tag">02 / DEFINITION</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:40px;width:100%;">
+      <div style="text-align:center;"><h2 class="title-section" id="s2-title">什么是 <span class="accent-purple">AI Agent</span>？</h2><div class="heading-line" id="s2-line"></div></div>
+      <div class="body-text" style="text-align:center;max-width:1200px;" id="s2-def">AI Agent（智能体）是一种能够<span class="accent-cyan">自主感知环境</span>、<span class="accent-cyan">做出决策</span>并<span class="accent-cyan">执行行动</span>来完成目标的人工智能系统。它不仅仅是回答问题，而是能够<span class="accent-bright">独立完成复杂任务</span>。</div>
+      <div style="display:flex;gap:30px;margin-top:20px;" id="s2-features">
+        <div class="card card-glow" style="flex:1;text-align:center;padding:30px 20px;"><div style="font-size:40px;margin-bottom:12px;">🎯</div><div style="font-size:22px;font-weight:700;color:#f0f0f0;">目标驱动</div><div style="font-size:16px;color:rgba(240,240,240,0.5);margin-top:8px;">设定目标，自主规划</div></div>
+        <div class="card card-glow" style="flex:1;text-align:center;padding:30px 20px;"><div style="font-size:40px;margin-bottom:12px;">👁️</div><div style="font-size:22px;font-weight:700;color:#f0f0f0;">环境感知</div><div style="font-size:16px;color:rgba(240,240,240,0.5);margin-top:8px;">观察、理解周围信息</div></div>
+        <div class="card card-glow" style="flex:1;text-align:center;padding:30px 20px;"><div style="font-size:40px;margin-bottom:12px;">⚡</div><div style="font-size:22px;font-weight:700;color:#f0f0f0;">自主决策</div><div style="font-size:16px;color:rgba(240,240,240,0.5);margin-top:8px;">无需人类逐步指令</div></div>
+        <div class="card card-glow" style="flex:1;text-align:center;padding:30px 20px;"><div style="font-size:40px;margin-bottom:12px;">🔧</div><div style="font-size:22px;font-weight:700;color:#f0f0f0;">工具使用</div><div style="font-size:16px;color:rgba(240,240,240,0.5);margin-top:8px;">调用外部工具完成任务</div></div>
+      </div>
+    </div>
+  </div>
+  <!-- Scene 3: Agent vs Chatbot -->
+  <div class="scene" id="scene3">
+    <div class="scene-tag">03 / COMPARISON</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:40px;width:100%;">
+      <div style="text-align:center;"><h2 class="title-section" id="s3-title">Agent <span class="accent-cyan">vs</span> 传统聊天机器人</h2><div class="heading-line"></div></div>
+      <div class="compare-row" id="s3-table" style="max-width:1400px;width:100%;">
+        <div class="compare-col old"><div style="font-family:Orbitron;font-size:28px;font-weight:700;color:rgba(240,240,240,0.5);margin-bottom:24px;text-align:center;">传统聊天机器人</div>
+          <div class="compare-item"><span class="compare-icon">💬</span>一问一答，被动响应</div>
+          <div class="compare-item"><span class="compare-icon">📋</span>无法执行实际操作</div>
+          <div class="compare-item"><span class="compare-icon">🧠</span>无记忆，每次对话独立</div>
+          <div class="compare-item"><span class="compare-icon">🔄</span>不能自主分解任务</div>
+          <div class="compare-item"><span class="compare-icon">❌</span>无法使用外部工具</div>
+        </div>
+        <div style="display:flex;align-items:center;font-size:40px;color:rgba(124,58,237,0.4);">→</div>
+        <div class="compare-col new"><div style="font-family:Orbitron;font-size:28px;font-weight:700;color:#a78bfa;margin-bottom:24px;text-align:center;">AI Agent 智能体</div>
+          <div class="compare-item"><span class="compare-icon">🤖</span>主动规划，多步推理</div>
+          <div class="compare-item"><span class="compare-icon">⚡</span>直接操作文件、API、数据库</div>
+          <div class="compare-item"><span class="compare-icon">🧬</span>长期记忆，持续学习</div>
+          <div class="compare-item"><span class="compare-icon">🔁</span>自主分解并执行复杂任务</div>
+          <div class="compare-item"><span class="compare-icon">✅</span>灵活调用各种工具和接口</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Scene 4: Core Components -->
+  <div class="scene" id="scene4">
+    <div class="scene-tag">04 / ARCHITECTURE</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:40px;width:100%;">
+      <div style="text-align:center;"><h2 class="title-section" id="s4-title">Agent 的 <span class="accent-purple">四大核心组件</span></h2><div class="heading-line"></div></div>
+      <div style="display:flex;gap:30px;width:100%;max-width:1500px;" id="s4-components">
+        <div class="card card-glow" style="flex:1;display:flex;flex-direction:column;align-items:center;padding:36px 24px;"><div style="font-family:Orbitron;font-size:64px;font-weight:900;color:rgba(124,58,237,0.2);">01</div><div style="font-size:48px;margin:8px 0;">🧠</div><h3 style="font-size:28px;font-weight:700;color:#f0f0f0;margin-bottom:16px;">大语言模型</h3><p style="font-size:18px;color:rgba(240,240,240,0.6);text-align:center;line-height:1.6;">Agent 的大脑<br/>负责理解、推理和决策</p></div>
+        <div class="card card-glow" style="flex:1;display:flex;flex-direction:column;align-items:center;padding:36px 24px;"><div style="font-family:Orbitron;font-size:64px;font-weight:900;color:rgba(124,58,237,0.2);">02</div><div style="font-size:48px;margin:8px 0;">👁️</div><h3 style="font-size:28px;font-weight:700;color:#f0f0f0;margin-bottom:16px;">感知模块</h3><p style="font-size:18px;color:rgba(240,240,240,0.6);text-align:center;line-height:1.6;">接收多模态输入<br/>文字、图像、音频、数据</p></div>
+        <div class="card card-glow" style="flex:1;display:flex;flex-direction:column;align-items:center;padding:36px 24px;"><div style="font-family:Orbitron;font-size:64px;font-weight:900;color:rgba(124,58,237,0.2);">03</div><div style="font-size:48px;margin:8px 0;">🔧</div><h3 style="font-size:28px;font-weight:700;color:#f0f0f0;margin-bottom:16px;">工具集</h3><p style="font-size:18px;color:rgba(240,240,240,0.6);text-align:center;line-height:1.6;">代码执行、网页搜索<br/>API 调用、文件操作</p></div>
+        <div class="card card-glow" style="flex:1;display:flex;flex-direction:column;align-items:center;padding:36px 24px;"><div style="font-family:Orbitron;font-size:64px;font-weight:900;color:rgba(124,58,237,0.2);">04</div><div style="font-size:48px;margin:8px 0;">💾</div><h3 style="font-size:28px;font-weight:700;color:#f0f0f0;margin-bottom:16px;">记忆系统</h3><p style="font-size:18px;color:rgba(240,240,240,0.6);text-align:center;line-height:1.6;">短期工作记忆<br/>长期知识存储</p></div>
+      </div>
+    </div>
+  </div>
+  <!-- Scene 5: The Loop -->
+  <div class="scene" id="scene5">
+    <div class="scene-tag">05 / THE LOOP</div>
+    <div style="display:flex;gap:60px;align-items:center;justify-content:center;width:100%;">
+      <div style="display:flex;flex-direction:column;gap:24px;">
+        <h2 class="title-section" id="s5-title">Agent 的<span class="accent-cyan">工作循环</span></h2>
+        <div class="heading-line" style="margin:0;"></div>
+        <p class="body-text" id="s5-desc" style="max-width:500px;">AI Agent 并非线性执行，而是通过一个<span class="accent-purple">持续循环</span>来完成任务：感知、推理、行动、反思，不断迭代直到目标达成。</p>
+      </div>
+      <div class="loop-container" id="s5-loop">
+        <div class="loop-node" style="top:0;left:220px;border-color:rgba(6,182,212,0.5);"><span class="icon">👁️</span>观察</div>
+        <div class="loop-node" style="top:220px;left:420px;border-color:rgba(124,58,237,0.5);"><span class="icon">🧠</span>思考</div>
+        <div class="loop-node" style="top:440px;left:220px;border-color:rgba(245,158,11,0.5);"><span class="icon">⚡</span>行动</div>
+        <div class="loop-node" style="top:220px;left:20px;border-color:rgba(16,185,129,0.5);"><span class="icon">🔄</span>反思</div>
+        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;"><div style="font-family:Orbitron;font-size:18px;color:rgba(124,58,237,0.5);letter-spacing:0.1em;">LOOP</div><div style="font-size:14px;color:rgba(240,240,240,0.3);margin-top:4px;">持续迭代</div></div>
+        <svg style="position:absolute;inset:0;pointer-events:none;" viewBox="0 0 600 600"><defs><linearGradient id="arrowGrad" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" style="stop-color:#7c3aed;stop-opacity:0.6"/><stop offset="100%" style="stop-color:#06b6d4;stop-opacity:0.6"/></linearGradient></defs>
+        <path d="M 370 80 Q 480 80 460 200" stroke="url(#arrowGrad)" fill="none" stroke-width="2" stroke-dasharray="8 4"/>
+        <path d="M 460 360 Q 480 480 370 460" stroke="url(#arrowGrad)" fill="none" stroke-width="2" stroke-dasharray="8 4"/>
+        <path d="M 230 460 Q 100 480 80 360" stroke="url(#arrowGrad)" fill="none" stroke-width="2" stroke-dasharray="8 4"/>
+        <path d="M 80 200 Q 100 80 230 80" stroke="url(#arrowGrad)" fill="none" stroke-width="2" stroke-dasharray="8 4"/></svg>
+      </div>
+    </div>
+  </div>
+  <!-- Scene 6: Real World Examples -->
+  <div class="scene" id="scene6">
+    <div class="scene-tag">06 / EXAMPLES</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:40px;width:100%;">
+      <div style="text-align:center;"><h2 class="title-section" id="s6-title">真实世界的 <span class="accent-purple">AI Agent</span></h2><div class="heading-line"></div></div>
+      <div class="examples-grid" id="s6-grid">
+        <div class="example-card"><div class="icon">💻</div><h3>编程 Agent</h3><p>理解需求、编写代码、运行测试、修复 Bug，端到端完成软件开发任务</p></div>
+        <div class="example-card"><div class="icon">🔬</div><h3>研究 Agent</h3><p>搜索文献、整理数据、分析结果、撰写报告，加速科学研究流程</p></div>
+        <div class="example-card"><div class="icon">📊</div><h3>数据分析 Agent</h3><p>连接数据库、清洗数据、生成图表、发现洞察，自动化分析流程</p></div>
+        <div class="example-card"><div class="icon">🛒</div><h3>购物 Agent</h3><p>比价、搜索优惠、自动下单、跟踪物流，一站式完成采购任务</p></div>
+        <div class="example-card"><div class="icon">📧</div><h3>办公 Agent</h3><p>管理邮件、安排日程、起草文档、整理会议纪要，提升工作效率</p></div>
+        <div class="example-card"><div class="icon">🏠</div><h3>生活 Agent</h3><p>智能家居控制、健康管理、旅行规划，成为你的数字管家</p></div>
+      </div>
+    </div>
+  </div>
+  <!-- Scene 7: Tool Ecosystem -->
+  <div class="scene" id="scene7">
+    <div class="scene-tag">07 / TOOLS</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:40px;width:100%;">
+      <div style="text-align:center;"><h2 class="title-section" id="s7-title">工具生态：<span class="accent-cyan">Agent 的超级能力</span></h2><div class="heading-line"></div>
+      <p class="body-text" style="text-align:center;margin-top:16px;font-size:24px;" id="s7-desc">Agent 通过 <span class="accent-purple">Function Calling</span> 机制调用外部工具，将大语言模型的推理能力与现实世界的操作能力连接起来</p></div>
+      <div class="tools-grid" id="s7-grid">
+        <div class="tool-item"><div class="icon">🔍</div><h4>网页搜索</h4><p>获取实时信息</p></div>
+        <div class="tool-item"><div class="icon">📁</div><h4>文件系统</h4><p>读写和管理文件</p></div>
+        <div class="tool-item"><div class="icon">🖥️</div><h4>代码执行</h4><p>运行和调试代码</p></div>
+        <div class="tool-item"><div class="icon">🌐</div><h4>API 调用</h4><p>连接第三方服务</p></div>
+        <div class="tool-item"><div class="icon">🗄️</div><h4>数据库</h4><p>查询和管理数据</p></div>
+        <div class="tool-item"><div class="icon">🖼️</div><h4>图像生成</h4><p>创建和编辑图片</p></div>
+        <div class="tool-item"><div class="icon">📧</div><h4>通讯工具</h4><p>发送消息和邮件</p></div>
+        <div class="tool-item"><div class="icon">🤖</div><h4>其他 Agent</h4><p>多 Agent 协作</p></div>
+      </div>
+    </div>
+  </div>
+  <!-- Scene 8: Multi-Agent -->
+  <div class="scene" id="scene8">
+    <div class="scene-tag">08 / MULTI-AGENT</div>
+    <div style="display:flex;gap:60px;align-items:center;justify-content:center;width:100%;">
+      <div style="display:flex;flex-direction:column;gap:24px;max-width:600px;">
+        <h2 class="title-section" id="s8-title">多 Agent <span class="accent-purple">协作</span></h2>
+        <div class="heading-line" style="margin:0;"></div>
+        <p class="body-text" id="s8-desc" style="max-width:560px;">未来的趋势不是单一 Agent，而是<span class="accent-cyan">多个专业 Agent 协同工作</span>。每个 Agent 负责不同领域，像一个高效的团队一样完成复杂项目。</p>
+        <div class="memory-stack" id="s8-layers">
+          <div class="memory-layer short"><h4 style="color:#22d3ee;">规划 Agent</h4><p>制定策略和任务分配</p></div>
+          <div class="memory-layer working"><h4 style="color:#f59e0b;">执行 Agent</h4><p>具体任务的操作实施</p></div>
+          <div class="memory-layer long"><h4 style="color:#a78bfa;">审核 Agent</h4><p>质量检查和结果验证</p></div>
+        </div>
+      </div>
+      <div style="position:relative;width:500px;height:500px;" id="s8-visual">
+        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:120px;height:120px;border-radius:50%;background:rgba(124,58,237,0.15);border:2px solid rgba(124,58,237,0.4);display:flex;align-items:center;justify-content:center;flex-direction:column;"><span style="font-size:36px;">🎯</span><span style="font-size:14px;color:#a78bfa;font-weight:600;">协调中心</span></div>
+        <div style="position:absolute;top:40px;left:50%;transform:translateX(-50%);width:90px;height:90px;border-radius:50%;background:rgba(6,182,212,0.1);border:1px solid rgba(6,182,212,0.3);display:flex;align-items:center;justify-content:center;flex-direction:column;"><span style="font-size:24px;">💻</span><span style="font-size:11px;color:#22d3ee;">编程</span></div>
+        <div style="position:absolute;top:50%;right:20px;transform:translateY(-50%);width:90px;height:90px;border-radius:50%;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);display:flex;align-items:center;justify-content:center;flex-direction:column;"><span style="font-size:24px;">📊</span><span style="font-size:11px;color:#f59e0b;">分析</span></div>
+        <div style="position:absolute;bottom:40px;left:50%;transform:translateX(-50%);width:90px;height:90px;border-radius:50%;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);display:flex;align-items:center;justify-content:center;flex-direction:column;"><span style="font-size:24px;">🔍</span><span style="font-size:11px;color:#10b981;">研究</span></div>
+        <div style="position:absolute;top:50%;left:20px;transform:translateY(-50%);width:90px;height:90px;border-radius:50%;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);display:flex;align-items:center;justify-content:center;flex-direction:column;"><span style="font-size:24px;">📝</span><span style="font-size:11px;color:#ef4444;">文档</span></div>
+        <svg style="position:absolute;inset:0;pointer-events:none;" viewBox="0 0 500 500"><line x1="250" y1="130" x2="250" y2="200" stroke="rgba(124,58,237,0.3)" stroke-width="1" stroke-dasharray="4 4"/><line x1="380" y1="250" x2="310" y2="250" stroke="rgba(124,58,237,0.3)" stroke-width="1" stroke-dasharray="4 4"/><line x1="250" y1="370" x2="250" y2="310" stroke="rgba(124,58,237,0.3)" stroke-width="1" stroke-dasharray="4 4"/><line x1="120" y1="250" x2="190" y2="250" stroke="rgba(124,58,237,0.3)" stroke-width="1" stroke-dasharray="4 4"/></svg>
+      </div>
+    </div>
+  </div>
+  <!-- Scene 9: Future -->
+  <div class="scene" id="scene9">
+    <div class="scene-tag">09 / FUTURE</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:40px;width:100%;">
+      <div style="text-align:center;"><h2 class="title-section" id="s9-title">AI Agent 的 <span class="accent-cyan">未来</span></h2><div class="heading-line"></div></div>
+      <div class="future-items" id="s9-items">
+        <div class="future-item"><div class="future-num">01</div><div><h3>更强大的推理能力</h3><p>随着大语言模型的进化，Agent 将具备更强的逻辑推理和问题解决能力</p></div></div>
+        <div class="future-item"><div class="future-num">02</div><div><h3>多模态交互</h3><p>不仅能理解文字，还能看懂图像、听懂语音，实现更自然的人机交互</p></div></div>
+        <div class="future-item"><div class="future-num">03</div><div><h3>自主进化与学习</h3><p>Agent 将从每次任务中学习，不断优化自己的策略和能力</p></div></div>
+        <div class="future-item"><div class="future-num">04</div><div><h3>融入日常生活</h3><p>从编程助手到生活管家，Agent 将成为每个人不可或缺的智能伙伴</p></div></div>
+      </div>
+    </div>
+  </div>
+  <!-- Scene 10: Ending -->
+  <div class="scene" id="scene10">
+    <div class="scene-tag">10 / END</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:30px;">
+      <div class="badge" id="s10-badge">THANK YOU</div>
+      <h1 class="title-mega" style="font-size:80px;" id="s10-title">AI AGENT</h1>
+      <div style="width:120px;height:2px;background:linear-gradient(90deg,#7c3aed,#06b6d4);border-radius:2px;"></div>
+      <p class="subtitle" id="s10-subtitle">智能体 — 让 AI 真正为你工作</p>
+      <p style="font-family:Noto Sans SC,sans-serif;font-weight:300;font-size:28px;color:rgba(240,240,240,0.5);letter-spacing:0.05em;margin-top:20px;" id="s10-cta">The future is autonomous.</p>
+    </div>
+  </div>
+</div>
+<script src="https://cdn.bootcdn.net/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script>
+var canvas = document.getElementById("particles");
+var ctx = canvas.getContext("2d");
+canvas.width = 1920; canvas.height = 1080;
+var particles = [];
+for (var i = 0; i < 60; i++) {
+  particles.push({ x: Math.random() * 1920, y: Math.random() * 1080, vx: (Math.random() - 0.5) * 0.3, vy: (Math.random() - 0.5) * 0.3, r: Math.random() * 2 + 0.5, color: Math.random() > 0.5 ? "rgba(124,58,237," : "rgba(6,182,212," });
+}
+function drawParticles() {
+  ctx.clearRect(0, 0, 1920, 1080);
+  particles.forEach(function(p) {
+    p.x += p.vx; p.y += p.vy;
+    if (p.x < 0) p.x = 1920; if (p.x > 1920) p.x = 0;
+    if (p.y < 0) p.y = 1080; if (p.y > 1080) p.y = 0;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fillStyle = p.color + "0.4)"; ctx.fill();
+  });
+  for (var i = 0; i < particles.length; i++) {
+    for (var j = i + 1; j < particles.length; j++) {
+      var dx = particles[i].x - particles[j].x;
+      var dy = particles[i].y - particles[j].y;
+      var dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 200) {
+        ctx.beginPath(); ctx.moveTo(particles[i].x, particles[i].y);
+        ctx.lineTo(particles[j].x, particles[j].y);
+        ctx.strokeStyle = "rgba(124,58,237," + (0.08 * (1 - dist / 200)) + ")";
+        ctx.lineWidth = 0.5; ctx.stroke();
+      }
+    }
+  }
+  requestAnimationFrame(drawParticles);
+}
+drawParticles();
+var TOTAL_DURATION = 300;
+var master = gsap.timeline({ paused: true });
+master.to(".orb-1", { opacity: 1, x: 100, y: 50, duration: 30, ease: "sine.inOut", yoyo: true, repeat: -1 }, 0);
+master.to(".orb-2", { opacity: 1, x: -80, y: -60, duration: 25, ease: "sine.inOut", yoyo: true, repeat: -1 }, 0);
+master.to(".orb-3", { opacity: 0.8, x: -120, y: 80, duration: 35, ease: "sine.inOut", yoyo: true, repeat: -1 }, 0);
+master.set("#scene1", { opacity: 1, visibility: "visible" }, 0);
+master.from("#s1-badge", { opacity: 0, y: -20, duration: 0.8, ease: "power3.out" }, 1);
+master.from("#s1-title", { opacity: 0, scale: 0.8, duration: 1.5, ease: "expo.out" }, 1.5);
+master.from("#s1-subtitle", { opacity: 0, y: 20, duration: 1, ease: "power2.out" }, 3);
+master.to("#scene1", { opacity: 0, duration: 1.5, ease: "power2.in" }, 18);
+master.set("#scene2", { opacity: 1, visibility: "visible" }, 20);
+master.from("#s2-title", { opacity: 0, y: 30, duration: 0.8, ease: "power3.out" }, 21);
+master.from("#s2-line", { scaleX: 0, duration: 0.6, ease: "power2.out" }, 22);
+master.from("#s2-def", { opacity: 0, y: 20, duration: 1, ease: "power2.out" }, 23);
+master.from("#s2-features .card", { opacity: 0, y: 40, stagger: 0.3, duration: 0.8, ease: "back.out(1.5)" }, 26);
+master.to("#scene2", { opacity: 0, duration: 1.5, ease: "power2.in" }, 58);
+
+master.set("#scene3", { opacity: 1, visibility: "visible" }, 60);
+master.from("#s3-title", { opacity: 0, y: 30, duration: 0.8, ease: "power3.out" }, 61);
+master.from("#s3-table .compare-col.old", { opacity: 0, x: -60, duration: 1, ease: "power3.out" }, 63);
+master.from("#s3-table .compare-col.new", { opacity: 0, x: 60, duration: 1, ease: "power3.out" }, 64);
+master.from("#s3-table .compare-item", { opacity: 0, x: -20, stagger: 0.15, duration: 0.5, ease: "power2.out" }, 66);
+master.to("#scene3", { opacity: 0, duration: 1.5, ease: "power2.in" }, 103);
+master.set("#scene4", { opacity: 1, visibility: "visible" }, 105);
+master.from("#s4-title", { opacity: 0, y: 30, duration: 0.8, ease: "power3.out" }, 106);
+master.from("#s4-components .card", { opacity: 0, y: 60, scale: 0.9, stagger: 0.4, duration: 1, ease: "back.out(1.5)" }, 108);
+master.to("#scene4", { opacity: 0, duration: 1.5, ease: "power2.in" }, 148);
+master.set("#scene5", { opacity: 1, visibility: "visible" }, 150);
+master.from("#s5-title", { opacity: 0, y: 30, duration: 0.8, ease: "power3.out" }, 151);
+master.from("#s5-desc", { opacity: 0, y: 20, duration: 0.8, ease: "power2.out" }, 152);
+master.from("#s5-loop .loop-node", { opacity: 0, scale: 0, stagger: 0.5, duration: 0.8, ease: "back.out(2)" }, 154);
+master.from("#s5-loop svg path", { strokeDashoffset: 200, stagger: 0.4, duration: 1.5, ease: "power2.inOut" }, 157);
+master.to("#scene5", { opacity: 0, duration: 1.5, ease: "power2.in" }, 193);
+master.set("#scene6", { opacity: 1, visibility: "visible" }, 195);
+master.from("#s6-title", { opacity: 0, y: 30, duration: 0.8, ease: "power3.out" }, 196);
+master.from("#s6-grid .example-card", { opacity: 0, y: 50, scale: 0.9, stagger: 0.25, duration: 0.7, ease: "back.out(1.3)" }, 198);
+master.to("#scene6", { opacity: 0, duration: 1.5, ease: "power2.in" }, 233);
+master.set("#scene7", { opacity: 1, visibility: "visible" }, 235);
+master.from("#s7-title", { opacity: 0, y: 30, duration: 0.8, ease: "power3.out" }, 236);
+master.from("#s7-desc", { opacity: 0, y: 20, duration: 0.8, ease: "power2.out" }, 237);
+master.from("#s7-grid .tool-item", { opacity: 0, scale: 0, stagger: 0.15, duration: 0.5, ease: "back.out(2)" }, 239);
+master.to("#scene7", { opacity: 0, duration: 1.5, ease: "power2.in" }, 263);
+master.set("#scene8", { opacity: 1, visibility: "visible" }, 265);
+master.from("#s8-title", { opacity: 0, y: 30, duration: 0.8, ease: "power3.out" }, 266);
+master.from("#s8-desc", { opacity: 0, y: 20, duration: 0.8, ease: "power2.out" }, 267);
+master.from("#s8-layers .memory-layer", { opacity: 0, x: -40, stagger: 0.3, duration: 0.6, ease: "power3.out" }, 269);
+master.from("#s8-visual > div", { opacity: 0, scale: 0, stagger: 0.2, duration: 0.6, ease: "back.out(1.5)" }, 270);
+master.to("#scene8", { opacity: 0, duration: 1.5, ease: "power2.in" }, 283);
+master.set("#scene9", { opacity: 1, visibility: "visible" }, 285);
+master.from("#s9-title", { opacity: 0, y: 30, duration: 0.8, ease: "power3.out" }, 286);
+master.from("#s9-items .future-item", { opacity: 0, x: -60, stagger: 0.5, duration: 0.8, ease: "power3.out" }, 288);
+master.to("#scene9", { opacity: 0, duration: 1.5, ease: "power2.in" }, 328);
+master.set("#scene10", { opacity: 1, visibility: "visible" }, 330);
+master.from("#s10-badge", { opacity: 0, y: -20, duration: 0.8, ease: "power3.out" }, 331);
+master.from("#s10-title", { opacity: 0, scale: 0.8, duration: 1.5, ease: "expo.out" }, 332);
+master.from("#s10-subtitle", { opacity: 0, y: 20, duration: 1, ease: "power2.out" }, 334);
+master.from("#s10-cta", { opacity: 0, duration: 1, ease: "power2.out" }, 336);
+var isPlaying = false;
+var timerEl = document.getElementById("timer");
+var barEl = document.getElementById("timelineBar");
+function formatTime(s) { var m = Math.floor(s / 60); var sec = Math.floor(s % 60); return (m < 10 ? "0" : "") + m + ":" + (sec < 10 ? "0" : "") + sec; }
+function updateUI() { var ct = master.time(); timerEl.textContent = formatTime(ct) + " / " + formatTime(TOTAL_DURATION); barEl.style.width = (ct / TOTAL_DURATION * 100) + "%"; requestAnimationFrame(updateUI); }
+updateUI();
+document.addEventListener("keydown", function(e) {
+  if (e.code === "Space") { e.preventDefault(); if (isPlaying) { master.pause(); isPlaying = false; } else { master.play(); isPlaying = true; } }
+  if (e.code === "ArrowRight") { master.seek(master.time() + 5); }
+  if (e.code === "ArrowLeft") { master.seek(Math.max(0, master.time() - 5)); }
+  if (e.code === "KeyR") { master.seek(0); master.pause(); isPlaying = false; }
+});
+document.getElementById("canvas").addEventListener("click", function(e) { if (e.target.tagName === "A") return; if (isPlaying) { master.pause(); isPlaying = false; } else { master.play(); isPlaying = true; } });
+setTimeout(function() { var hint = document.createElement("div"); hint.style.cssText = "position:absolute;bottom:60px;left:50%;transform:translateX(-50%);z-index:200;font-family:JetBrains Mono,monospace;font-size:16px;color:rgba(240,240,240,0.3);letter-spacing:0.1em;"; hint.textContent = "[ SPACE ] Play/Pause  |  [ <- -> ] Seek  |  [ R ] Reset"; document.getElementById("canvas").appendChild(hint); gsap.to(hint, { opacity: 0, duration: 1, delay: 8 }); }, 500);
+</script>
+</body>
+</html>

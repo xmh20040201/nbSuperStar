@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#05080f;
+  --panel:rgba(17,24,39,.78); --panel-hi:rgba(255,255,255,.045);
+  --raised:rgba(38,50,74,.55);
+  --border:rgba(122,143,185,.13); --border-2:rgba(122,143,185,.26);
+  --text:#e9effa; --muted:#8b9bb4; --soft:#c3cede;
+  --cyan:#22d3ee; --indigo:#6366f1; --violet:#a855f7;
+  --green:#34d399; --amber:#fbbf24; --red:#f87171;
+  --grad:linear-gradient(135deg,#22d3ee 0%,#6366f1 55%,#a855f7 100%);
+  --grad-btn:linear-gradient(135deg,#0ea5e9,#6366f1);
+  --font:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",Consolas,"Noto Sans Mono CJK SC",monospace;
+}
+html,body{width:1440px;height:900px}
+body{font-family:var(--font);color:var(--text);overflow:hidden;
+  background:
+    radial-gradient(900px 460px at 88% -8%, rgba(99,102,241,.20), transparent 60%),
+    radial-gradient(760px 420px at -6% -6%, rgba(34,211,238,.14), transparent 58%),
+    radial-gradient(680px 520px at 52% 118%, rgba(168,85,247,.10), transparent 62%),
+    var(--bg);}
+.app{display:flex;width:1440px;height:900px}
+
+/* ---------- Sidebar ---------- */
+.side{width:248px;flex:0 0 248px;padding:20px 16px;display:flex;flex-direction:column;gap:6px;
+  background:linear-gradient(180deg,rgba(12,18,31,.94),rgba(8,12,22,.94));
+  border-right:1px solid var(--border)}
+.brand{display:flex;align-items:center;gap:11px;padding:6px 8px 18px}
+.brand .mark{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;background:var(--grad-btn);box-shadow:0 8px 22px rgba(56,132,248,.45)}
+.brand .mark svg{width:21px;height:21px;fill:#fff}
+.brand .name{font-size:17px;font-weight:800;letter-spacing:.2px;background:linear-gradient(90deg,#7dd3fc,#a5b4fc);-webkit-background-clip:text;background-clip:text;color:transparent}
+.brand .sub{font-size:10px;color:var(--muted);letter-spacing:1px;margin-top:1px}
+.group{font-size:10.5px;color:#5e6e88;font-weight:700;letter-spacing:1.2px;padding:10px 10px 6px}
+.nav{display:flex;flex-direction:column;gap:4px}
+.nav a{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:11px;color:var(--muted);font-size:13.5px;font-weight:500;text-decoration:none;position:relative;transition:.15s}
+.nav a svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:.9}
+.nav a.active{color:#fff;background:linear-gradient(135deg,rgba(34,211,238,.15),rgba(99,102,241,.17));box-shadow:inset 0 0 0 1px rgba(99,102,241,.34)}
+.nav a.active::before{content:"";position:absolute;left:-16px;top:9px;bottom:9px;width:3px;border-radius:3px;background:var(--grad);box-shadow:0 0 12px rgba(99,102,241,.7)}
+.nav a .dot{margin-left:auto;width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green)}
+.foot{margin-top:auto;padding:13px 14px;border-radius:14px;background:var(--panel);border:1px solid var(--border);box-shadow:inset 0 1px 0 var(--panel-hi)}
+.foot .row{display:flex;justify-content:space-between;align-items:center;font-size:11.5px;color:var(--muted)}
+.foot .row+.row{margin-top:7px}
+.foot b{color:var(--text);font-weight:700;font-variant-numeric:tabular-nums}
+.foot .live{display:inline-flex;align-items:center;gap:6px;color:var(--green);font-weight:700}
+.foot .live i{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green)}
+
+/* ---------- Main frame ---------- */
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.top{height:64px;flex:0 0 64px;display:flex;align-items:center;gap:16px;padding:0 26px;background:rgba(8,12,22,.6);border-bottom:1px solid var(--border)}
+.crumb{display:flex;align-items:center;gap:9px;color:var(--muted);font-size:13px}
+.crumb b{color:var(--text);font-weight:700;font-size:15px}.crumb .sep{opacity:.4}
+.spacer{flex:1}
+.search{display:flex;align-items:center;gap:9px;width:224px;height:37px;padding:0 13px;background:rgba(3,6,15,.6);border:1px solid var(--border-2);border-radius:11px;color:var(--muted);font-size:13px}
+.search svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2}
+.status-pill{display:flex;align-items:center;gap:8px;height:33px;padding:0 14px;border-radius:10px;font-size:12.5px;font-weight:700;color:#6ee7b7;background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.3)}
+.status-pill i{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 4px rgba(52,211,153,.16)}
+.avatar{display:flex;align-items:center;gap:9px}
+.avatar .img{width:36px;height:36px;border-radius:10px;background:var(--grad);display:grid;place-items:center;color:#fff;font-weight:800;font-size:14px}
+.avatar .who{font-size:12.5px}.avatar .who b{display:block;font-weight:700}.avatar .who span{color:var(--muted);font-size:11px}
+
+.content{flex:1;padding:20px 24px;display:flex;flex-direction:column;gap:14px;min-height:0}
+
+/* ---------- Stat cards + sparkline ---------- */
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:13px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:16px;box-shadow:inset 0 1px 0 var(--panel-hi)}
+.stat{padding:15px 17px 13px;display:flex;gap:6px}
+.stat .l{flex:1;min-width:0}
+.stat .ico{width:33px;height:33px;border-radius:10px;display:grid;place-items:center;margin-bottom:10px}
+.stat .ico svg{width:16px;height:16px;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.stat .lbl{font-size:11.5px;color:var(--muted);font-weight:600}
+.stat .val{font-size:24px;font-weight:800;margin-top:4px;display:flex;align-items:baseline;gap:5px;font-variant-numeric:tabular-nums}
+.stat .val small{font-size:12.5px;color:var(--muted);font-weight:600}
+.stat .delta{font-size:11px;margin-top:5px;color:var(--muted)}
+.stat .delta b{color:var(--green)}
+.stat .spark{align-self:flex-end;opacity:.9}
+.ico.c1{background:rgba(34,211,238,.13)} .ico.c1 svg{stroke:var(--cyan)}
+.ico.c2{background:rgba(99,102,241,.16)} .ico.c2 svg{stroke:#a5b4fc}
+.ico.c3{background:rgba(168,85,247,.15)} .ico.c3 svg{stroke:#d8b4fe}
+.ico.c4{background:rgba(52,211,153,.13)} .ico.c4 svg{stroke:var(--green)}
+
+.row2{display:grid;grid-template-columns:336px 1fr;gap:14px;flex:1;min-height:0}
+.col{display:flex;flex-direction:column;gap:14px;min-height:0}
+.card .head{display:flex;align-items:center;gap:9px;padding:14px 17px;border-bottom:1px solid var(--border);font-size:13.5px;font-weight:700}
+.card .head svg{width:16px;height:16px;fill:none;stroke:var(--cyan);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.card .body{padding:16px 17px}
+
+/* ---------- Params card ---------- */
+.field-lbl{font-size:12px;color:var(--soft);font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.chip{font-size:12px;font-weight:800;color:#7dd3fc;background:rgba(34,211,238,.12);border:1px solid rgba(34,211,238,.3);padding:1px 9px;border-radius:8px;font-variant-numeric:tabular-nums}
+.slider{height:6px;border-radius:99px;background:linear-gradient(90deg,rgba(34,211,238,.55),rgba(99,102,241,.55));position:relative;margin:15px 0 6px}
+.slider i{position:absolute;right:56px;top:-6px;width:18px;height:18px;border-radius:50%;background:#fff;border:3px solid var(--cyan);box-shadow:0 2px 10px rgba(34,211,238,.6)}
+.ticks{display:flex;justify-content:space-between;font-size:10px;color:#5e6e88}
+.num{display:flex;align-items:center;justify-content:space-between;height:40px;padding:0 13px;margin-top:8px;background:rgba(3,6,15,.55);border:1px solid var(--border-2);border-radius:11px;font-size:14px;font-variant-numeric:tabular-nums}
+.num .stp{display:flex;gap:6px}.num .stp b{width:22px;height:22px;border-radius:6px;background:var(--raised);display:grid;place-items:center;font-weight:700;color:var(--soft)}
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}
+.btn{height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;gap:8px;font-size:14px;font-weight:700}
+.btn svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.btn.go{color:#fff;background:linear-gradient(135deg,#10b981,#059669);box-shadow:0 8px 22px rgba(16,185,129,.3)}
+.btn.stop{color:#fca5a5;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.35)}
+
+/* ---------- Week chart ---------- */
+.week{display:flex;align-items:flex-end;gap:10px;height:86px;padding:6px 4px 0}
+.week .b{flex:1;display:flex;flex-direction:column;align-items:center;gap:7px;height:100%;justify-content:flex-end}
+.week .b i{width:100%;max-width:26px;border-radius:6px 6px 3px 3px;background:linear-gradient(180deg,rgba(99,102,241,.85),rgba(34,211,238,.55));box-shadow:0 0 10px rgba(99,102,241,.25)}
+.week .b.today i{background:linear-gradient(180deg,#22d3ee,#6366f1);box-shadow:0 0 14px rgba(34,211,238,.5)}
+.week .b span{font-size:10px;color:#5e6e88}
+.week .b.today span{color:#7dd3fc;font-weight:700}
+
+/* ---------- Current task + ring + waveform ---------- */
+.curwrap{display:flex;gap:18px;align-items:stretch}
+.curl{flex:1;min-width:0}
+.cur{display:flex;align-items:center;gap:13px;padding:12px 14px;border-radius:13px;background:rgba(3,6,15,.4);border:1px solid var(--border)}
+.cur .thumb{width:42px;height:42px;border-radius:11px;background:linear-gradient(135deg,rgba(34,211,238,.22),rgba(99,102,241,.22));display:grid;place-items:center;flex:0 0 auto}
+.cur .thumb svg{width:19px;height:19px;fill:none;stroke:#7dd3fc;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.cur .t{flex:1;min-width:0}.cur .t small{color:var(--muted);font-size:11px}
+.cur .t b{display:block;font-size:13.5px;margin-top:2px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cur .badge{font-size:10.5px;font-weight:700;color:#7dd3fc;background:rgba(34,211,238,.11);border:1px solid rgba(34,211,238,.3);padding:3px 9px;border-radius:8px;flex:0 0 auto}
+.wave{display:flex;align-items:center;gap:3px;height:44px;margin:14px 2px 4px}
+.wave i{flex:1;border-radius:3px;background:rgba(139,155,180,.28)}
+.wave i.p{background:linear-gradient(180deg,#22d3ee,#6366f1);box-shadow:0 0 6px rgba(34,211,238,.35)}
+.wavemeta{display:flex;justify-content:space-between;font-size:10.5px;color:#5e6e88;font-variant-numeric:tabular-nums;margin-bottom:12px}
+.prog .top{display:flex;justify-content:space-between;font-size:12px;margin-bottom:7px}
+.prog .top span{color:var(--muted)}.prog .top b{color:var(--text);font-weight:700}
+.bar{height:8px;border-radius:99px;background:rgba(3,6,15,.6);border:1px solid var(--border);overflow:hidden}
+.bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#22d3ee,#6366f1);box-shadow:0 0 12px rgba(99,102,241,.5)}
+.ringbox{flex:0 0 128px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border-left:1px solid var(--border);padding-left:18px}
+.ringbox .pct{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;background:linear-gradient(90deg,#7dd3fc,#a5b4fc);-webkit-background-clip:text;background-clip:text;color:transparent}
+.ringbox .cap{font-size:10.5px;color:var(--muted)}
+
+/* ---------- Logs ---------- */
+.logs{flex:1;min-height:0;display:flex;flex-direction:column}
+.logs .tools{margin-left:auto;display:flex;gap:8px}
+.logs .tools .tb{font-size:11px;font-weight:600;color:var(--soft);background:rgba(148,163,184,.08);border:1px solid var(--border);padding:3px 9px;border-radius:8px}
+.logs .tools .tb.on{color:#6ee7b7;border-color:rgba(52,211,153,.35);background:rgba(52,211,153,.09)}
+.console{flex:1;overflow:hidden;padding:11px 15px;font-family:var(--mono);font-size:12px;line-height:1.8;background:rgba(3,6,15,.55);border-radius:0 0 16px 16px}
+.l{display:flex;gap:10px;white-space:nowrap}
+.l .t{color:#5e6e88}.l .lv{font-weight:700;width:60px}
+.lv.INFO{color:#cbd5e1}.lv.TRACE{color:#94a3b8}.lv.DEBUG{color:#93c5fd}.lv.WARN{color:var(--amber)}.lv.ERR{color:var(--red)}.lv.OK{color:var(--green)}
+.l .msg{color:#c3cede}
+.l.hl{background:rgba(248,113,113,.07);border-radius:6px}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand"><span class="mark"><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l8.91-1.01L12 2z"/></svg></span><div><div class="name">SuperStar</div><div class="sub">STUDY AUTOMATION</div></div></div>
+    <div class="group">总览</div>
+    <nav class="nav">
+      <a href="#" class="active"><svg viewBox="0 0 24 24"><path d="M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 9h8V3h-8z"/></svg>仪表盘</a>
+      <a href="#"><svg viewBox="0 0 24 24"><path d="m6 3 14 9-14 9V3z"/></svg>学习控制<span class="dot"></span></a>
+      <a href="#"><svg viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>课程列表</a>
+      <a href="#"><svg viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>实时日志</a>
+    </nav>
+    <div class="group">管理</div>
+    <nav class="nav">
+      <a href="#"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>题库缓存</a>
+      <a href="#"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>系统配置</a>
+      <a href="#"><svg viewBox="0 0 24 24"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3"/></svg>账号登录</a>
+    </nav>
+    <div class="foot">
+      <div class="row"><span>运行状态</span><span class="live"><i></i>运行中</span></div>
+      <div class="row"><span>课程进度</span><b>12 / 18 · 67%</b></div>
+      <div class="row"><span>已用时间</span><b>02:14:08</b></div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="top">
+      <div class="crumb">工作台 <span class="sep">/</span> <b>仪表盘</b></div>
+      <div class="spacer"></div>
+      <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg>搜索课程 / 章节…</div>
+      <div class="status-pill"><i></i>任务运行中</div>
+      <div class="avatar"><span class="img">王</span><div class="who"><b>王同学</b><span>UID 256423459</span></div></div>
+    </header>
+
+    <div class="content">
+      <div class="stat-grid">
+        <div class="card stat"><div class="l">
+          <span class="ico c1"><svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span>
+          <div class="lbl">运行状态</div><div class="val" style="color:#6ee7b7">运行中</div><div class="delta">4 个并发章节处理中</div>
+        </div><svg class="spark" width="86" height="30" viewBox="0 0 86 30"><polyline points="0,22 12,18 24,20 36,12 48,14 60,8 72,10 86,4" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round"/></svg></div>
+        <div class="card stat"><div class="l">
+          <span class="ico c2"><svg viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></span>
+          <div class="lbl">已完成课程</div><div class="val">12 <small>/ 18</small></div><div class="delta">较昨日 <b>+3</b></div>
+        </div><svg class="spark" width="86" height="30" viewBox="0 0 86 30"><polyline points="0,24 14,21 28,22 42,16 56,14 70,9 86,6" fill="none" stroke="#818cf8" stroke-width="2" stroke-linecap="round"/></svg></div>
+        <div class="card stat"><div class="l">
+          <span class="ico c3"><svg viewBox="0 0 24 24"><path d="M12 20V10M18 20V4M6 20v-4"/></svg></span>
+          <div class="lbl">章节进度</div><div class="val">386 <small>/ 512</small></div><div class="delta">完成率 75.4%</div>
+        </div><svg class="spark" width="86" height="30" viewBox="0 0 86 30"><polyline points="0,25 12,22 24,23 36,17 48,18 60,12 72,13 86,8" fill="none" stroke="#c084fc" stroke-width="2" stroke-linecap="round"/></svg></div>
+        <div class="card stat"><div class="l">
+          <span class="ico c4"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+          <div class="lbl">已用时间</div><div class="val" style="font-size:21px">02:14:08</div><div class="delta">本次会话累计</div>
+        </div><svg class="spark" width="86" height="30" viewBox="0 0 86 30"><polyline points="0,26 12,23 24,24 36,20 48,21 60,15 72,16 86,11" fill="none" stroke="#22d3ee" stroke-width="2" stroke-linecap="round"/></svg></div>
+      </div>
+
+      <div class="row2">
+        <div class="col">
+          <div class="card">
+            <div class="head"><svg viewBox="0 0 24 24"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg>学习参数</div>
+            <div class="body">
+              <div class="field-lbl">播放倍率 <span class="chip">1.50x</span></div>
+              <div class="slider"><i></i></div>
+              <div class="ticks"><span>1.0x</span><span>2.0x</span><span>3.0x</span><span>4.0x</span></div>
+              <div style="height:14px"></div>
+              <div class="field-lbl">并发章节数</div>
+              <div class="num">4 <span class="stp"><b>−</b><b>+</b></span></div>
+              <div class="btns">
+                <div class="btn go"><svg viewBox="0 0 24 24"><path d="m6 3 14 9-14 9V3z"/></svg>开始</div>
+                <div class="btn stop"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>停止</div>
+              </div>
+            </div>
+          </div>
+          <div class="card" style="flex:1">
+            <div class="head"><svg viewBox="0 0 24 24"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>本周学习时长</div>
+            <div class="body">
+              <div class="week">
+                <div class="b"><i style="height:38%"></i><span>一</span></div>
+                <div class="b"><i style="height:62%"></i><span>二</span></div>
+                <div class="b"><i style="height:48%"></i><span>三</span></div>
+                <div class="b"><i style="height:78%"></i><span>四</span></div>
+                <div class="b"><i style="height:56%"></i><span>五</span></div>
+                <div class="b today"><i style="height:92%"></i><span>六</span></div>
+                <div class="b"><i style="height:20%"></i><span>日</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col">
+          <div class="card" style="flex:0 0 auto">
+            <div class="head"><svg viewBox="0 0 24 24"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>当前任务</div>
+            <div class="body">
+              <div class="curwrap">
+                <div class="curl">
+                  <div class="cur">
+                    <span class="thumb"><svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></span>
+                    <div class="t"><small>当前课程 · 第八章</small><b>美育中国 — 8.6 2012-2025年（新时代）</b></div>
+                    <span class="badge">音频任务</span>
+                  </div>
+                  <div class="wave">
+                    <i class="p" style="height:30%"></i><i class="p" style="height:55%"></i><i class="p" style="height:42%"></i><i class="p" style="height:70%"></i><i class="p" style="height:58%"></i><i class="p" style="height:85%"></i><i class="p" style="height:64%"></i><i class="p" style="height:92%"></i><i class="p" style="height:74%"></i><i class="p" style="height:60%"></i><i class="p" style="height:78%"></i><i class="p" style="height:52%"></i><i style="height:66%"></i><i style="height:44%"></i><i style="height:70%"></i><i style="height:38%"></i><i style="height:56%"></i><i style="height:30%"></i><i style="height:48%"></i><i style="height:36%"></i><i style="height:52%"></i><i style="height:28%"></i><i style="height:42%"></i><i style="height:24%"></i>
+                  </div>
+                  <div class="wavemeta"><span>03:54</span><span>07:31</span></div>
+                  <div class="prog">
+                    <div class="top"><span>章节进度</span><b>52%</b></div>
+                    <div class="bar"><i style="width:52%"></i></div>
+                  </div>
+                </div>
+                <div class="ringbox">
+                  <svg width="92" height="92" viewBox="0 0 92 92">
+                    <circle cx="46" cy="46" r="38" fill="none" stroke="rgba(148,163,184,.14)" stroke-width="9"/>
+                    <circle cx="46" cy="46" r="38" fill="none" stroke="url(#rg)" stroke-width="9" stroke-linecap="round" stroke-dasharray="180 238.8" transform="rotate(-90 46 46)"/>
+                    <defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22d3ee"/><stop offset="1" stop-color="#a855f7"/></linearGradient></defs>
+                  </svg>
+                  <div class="pct">75.4%</div>
+                  <div class="cap">整体进度</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card logs">
+            <div class="head"><svg viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>实时日志
+              <span class="tools"><span class="tb">清空</span><span class="tb">复制</span><span class="tb on">自动滚动</span></span>
+            </div>
+            <div class="console">
+              <div class="l"><span class="t">22:54:47</span><span class="lv TRACE">TRACE</span><span class="msg">Got rt: 0.9</span></div>
+              <div class="l"><span class="t">22:54:47</span><span class="lv INFO">INFO</span><span class="msg">{"isPassed":false,"videoTimeLimit":false}</span></div>
+              <div class="l"><span class="t">22:54:47</span><span class="lv TRACE">TRACE</span><span class="msg">Progress logged — 章节 8.6 上报成功</span></div>
+              <div class="l"><span class="t">22:53:22</span><span class="lv DEBUG">DEBUG</span><span class="msg">Refreshed token: e77d9a…, duration: 451, play: 54.58</span></div>
+              <div class="l hl"><span class="t">22:52:37</span><span class="lv ERR">ERROR</span><span class="msg">出现403报错, 等待32s后重试 (第3次) — 递增退避</span></div>
+              <div class="l"><span class="t">22:52:33</span><span class="lv WARN">WARN</span><span class="msg">视频进度上报返回403, jobid=1787835126540186</span></div>
+              <div class="l"><span class="t">22:52:31</span><span class="lv DEBUG">DEBUG</span><span class="msg">Refreshed token: e77d9a…, duration: 451</span></div>
+              <div class="l"><span class="t">22:51:51</span><span class="lv OK">SUCCESS</span><span class="msg">章节 7.3 学习完成，已进入下一节</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

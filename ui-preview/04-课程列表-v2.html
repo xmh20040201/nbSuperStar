@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#05080f;--panel:rgba(17,24,39,.78);--panel-hi:rgba(255,255,255,.045);--raised:rgba(38,50,74,.55);--border:rgba(122,143,185,.13);--border-2:rgba(122,143,185,.26);--text:#e9effa;--muted:#8b9bb4;--soft:#c3cede;--cyan:#22d3ee;--indigo:#6366f1;--green:#34d399;--amber:#fbbf24;--grad:linear-gradient(135deg,#22d3ee,#6366f1,#a855f7);--grad-btn:linear-gradient(135deg,#0ea5e9,#6366f1);--font:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif}
+html,body{width:1440px;height:900px}
+body{font-family:var(--font);color:var(--text);overflow:hidden;background:radial-gradient(900px 460px at 88% -8%,rgba(99,102,241,.20),transparent 60%),radial-gradient(760px 420px at -6% -6%,rgba(34,211,238,.14),transparent 58%),var(--bg)}
+.app{display:flex;width:1440px;height:900px}
+.side{width:248px;flex:0 0 248px;padding:20px 16px;display:flex;flex-direction:column;gap:6px;background:linear-gradient(180deg,rgba(12,18,31,.94),rgba(8,12,22,.94));border-right:1px solid var(--border)}
+.brand{display:flex;align-items:center;gap:11px;padding:6px 8px 18px}
+.brand .mark{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;background:var(--grad-btn);box-shadow:0 8px 22px rgba(56,132,248,.45)}
+.brand .mark svg{width:21px;height:21px;fill:#fff}
+.brand .name{font-size:17px;font-weight:800;background:linear-gradient(90deg,#7dd3fc,#a5b4fc);-webkit-background-clip:text;background-clip:text;color:transparent}
+.brand .sub{font-size:10px;color:var(--muted);letter-spacing:1px;margin-top:1px}
+.group{font-size:10.5px;color:#5e6e88;font-weight:700;letter-spacing:1.2px;padding:10px 10px 6px}
+.nav{display:flex;flex-direction:column;gap:4px}
+.nav a{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:11px;color:var(--muted);font-size:13.5px;font-weight:500;text-decoration:none;position:relative}
+.nav a svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:.9}
+.nav a.active{color:#fff;background:linear-gradient(135deg,rgba(34,211,238,.15),rgba(99,102,241,.17));box-shadow:inset 0 0 0 1px rgba(99,102,241,.34)}
+.nav a.active::before{content:"";position:absolute;left:-16px;top:9px;bottom:9px;width:3px;border-radius:3px;background:var(--grad);box-shadow:0 0 12px rgba(99,102,241,.7)}
+.foot{margin-top:auto;padding:13px 14px;border-radius:14px;background:var(--panel);border:1px solid var(--border);box-shadow:inset 0 1px 0 var(--panel-hi)}
+.foot .row{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted)}.foot .row+.row{margin-top:7px}.foot b{color:var(--text);font-weight:700}.foot .live{color:var(--green);font-weight:700}
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.top{height:64px;flex:0 0 64px;display:flex;align-items:center;gap:16px;padding:0 26px;background:rgba(8,12,22,.6);border-bottom:1px solid var(--border)}
+.crumb{display:flex;align-items:center;gap:9px;color:var(--muted);font-size:13px}.crumb b{color:var(--text);font-weight:700;font-size:15px}.crumb .sep{opacity:.4}
+.spacer{flex:1}
+.status-pill{display:flex;align-items:center;gap:8px;height:33px;padding:0 14px;border-radius:10px;font-size:12.5px;font-weight:700;color:#6ee7b7;background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.3)}
+.status-pill i{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 4px rgba(52,211,153,.16)}
+.avatar .img{width:36px;height:36px;border-radius:10px;background:var(--grad-btn);display:grid;place-items:center;color:#fff;font-weight:800}
+.content{flex:1;padding:20px 24px;display:flex;flex-direction:column;gap:13px;min-height:0}
+.pagehead{display:flex;align-items:flex-end;justify-content:space-between}
+.pagehead h2{font-size:20px;font-weight:800;display:flex;align-items:center;gap:11px}
+.pagehead h2::before{content:"";width:5px;height:21px;border-radius:4px;background:var(--grad);box-shadow:0 0 12px rgba(99,102,241,.6)}
+.pagehead p{color:var(--muted);font-size:12.5px;margin-top:5px;padding-left:16px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:16px;box-shadow:inset 0 1px 0 var(--panel-hi)}
+.toolbar{display:flex;align-items:center;gap:10px;padding:12px 16px;flex-wrap:wrap}
+.btn{height:37px;padding:0 14px;border-radius:10px;display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:700}
+.btn svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.btn.pri{color:#fff;background:var(--grad-btn);box-shadow:0 6px 18px rgba(56,132,248,.3)}
+.btn.ok{color:#fff;background:linear-gradient(135deg,#10b981,#059669)}
+.btn.info{color:#7dd3fc;background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.4)}
+.chkline{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--soft)}
+.cbx{width:19px;height:19px;border-radius:6px;display:grid;place-items:center;border:2px solid var(--border-2);flex:0 0 auto}
+.cbx.on{background:var(--grad-btn);border-color:transparent;box-shadow:0 0 10px rgba(56,132,248,.45)}
+.cbx.on svg{width:12px;height:12px;fill:none;stroke:#fff;stroke-width:3.2;stroke-linecap:round;stroke-linejoin:round}
+.search{display:flex;align-items:center;gap:9px;height:37px;padding:0 13px;background:rgba(3,6,15,.6);border:1px solid var(--border-2);border-radius:10px;color:var(--muted);font-size:13px;width:250px;margin-left:auto}
+.search svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2}
+.count{font-size:12px;font-weight:700;color:#a5b4fc;background:rgba(99,102,241,.14);border:1px solid rgba(129,140,248,.3);padding:6px 11px;border-radius:8px}
+.filters{display:flex;gap:8px;align-items:center}
+.fchip{font-size:12.5px;font-weight:600;color:var(--muted);background:rgba(148,163,184,.07);border:1px solid var(--border);padding:7px 14px;border-radius:99px;display:inline-flex;align-items:center;gap:7px}
+.fchip b{font-weight:800}
+.fchip.on{color:#fff;background:linear-gradient(135deg,rgba(34,211,238,.16),rgba(99,102,241,.18));border-color:rgba(99,102,241,.4)}
+.fchip .n{font-size:10.5px;padding:1px 6px;border-radius:6px;background:rgba(148,163,184,.14)}
+.fchip.on .n{background:rgba(99,102,241,.3);color:#c7d2fe}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;overflow:hidden}
+.cc{position:relative;display:flex;align-items:center;gap:13px;padding:14px 16px;background:var(--panel);border:1px solid var(--border);border-radius:14px;box-shadow:inset 0 1px 0 var(--panel-hi)}
+.cc.sel{border-color:rgba(99,102,241,.5);background:linear-gradient(135deg,rgba(34,211,238,.06),rgba(99,102,241,.08));box-shadow:0 0 0 1px rgba(99,102,241,.25),0 6px 18px rgba(56,132,248,.08)}
+.cc .t{flex:1;min-width:0}
+.cc .t .r1{display:flex;align-items:center;gap:8px}
+.cc .t b{font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:7px;flex:0 0 auto}
+.st.doing{color:#7dd3fc;background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.28)}
+.st.done{color:#6ee7b7;background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.28)}
+.st.todo{color:#8b9bb4;background:rgba(148,163,184,.08);border:1px solid rgba(148,163,184,.2)}
+.cc .meta{display:flex;align-items:center;gap:9px;margin-top:9px}
+.cc .pbar{flex:1;height:6px;border-radius:99px;background:rgba(3,6,15,.6);border:1px solid var(--border);overflow:hidden}
+.cc .pbar i{display:block;height:100%;border-radius:99px;background:var(--grad)}
+.cc .pbar i.full{background:linear-gradient(90deg,#10b981,#34d399)}
+.cc .pp{font-size:11.5px;font-weight:700;color:var(--soft);font-variant-numeric:tabular-nums;min-width:36px;text-align:right}
+.cc .b{font-size:10.5px;color:var(--muted);background:rgba(148,163,184,.1);border:1px solid var(--border);padding:3px 8px;border-radius:7px;flex:0 0 auto}
+</style></head><body>
+<div class="app">
+  <aside class="side">
+    <div class="brand"><span class="mark"><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l8.91-1.01L12 2z"/></svg></span><div><div class="name">SuperStar</div><div class="sub">STUDY AUTOMATION</div></div></div>
+    <div class="group">总览</div>
+    <nav class="nav">
+      <a href="#"><svg viewBox="0 0 24 24"><path d="M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 9h8V3h-8z"/></svg>仪表盘</a>
+      <a href="#"><svg viewBox="0 0 24 24"><path d="m6 3 14 9-14 9V3z"/></svg>学习控制</a>
+      <a href="#" class="active"><svg viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>课程列表</a>
+      <a href="#"><svg viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>实时日志</a>
+    </nav>
+    <div class="group">管理</div>
+    <nav class="nav">
+      <a href="#"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>题库缓存</a>
+      <a href="#"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>系统配置</a>
+      <a href="#"><svg viewBox="0 0 24 24"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3"/></svg>账号登录</a>
+    </nav>
+    <div class="foot"><div class="row"><span>运行状态</span><span class="live">● 运行中</span></div><div class="row"><span>课程进度</span><b>12 / 18 · 67%</b></div><div class="row"><span>已用时间</span><b>02:14:08</b></div></div>
+  </aside>
+  <div class="main">
+    <header class="top"><div class="crumb">工作台 <span class="sep">/</span> <b>课程列表</b></div><div class="spacer"></div><div class="status-pill"><i></i>任务运行中</div><div class="avatar"><span class="img">王</span></div></header>
+    <div class="content">
+      <div class="pagehead"><div><h2>课程列表</h2><p>勾选需要学习的课程并保存，支持按名称或 ID 搜索</p></div></div>
+      <div class="card toolbar">
+        <div class="btn pri"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>刷新列表</div>
+        <div class="btn ok"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>保存选择</div>
+        <div class="btn info"><svg viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/></svg>阅读链接</div>
+        <div class="chkline"><span class="cbx on"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span>全选</div>
+        <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg>搜索课程名称或 ID</div>
+        <span class="count">已选 5 个</span>
+      </div>
+      <div class="filters">
+        <span class="fchip on"><b>全部</b><span class="n">8</span></span>
+        <span class="fchip">进行中<span class="n">5</span></span>
+        <span class="fchip">已完成<span class="n">2</span></span>
+        <span class="fchip">未开始<span class="n">1</span></span>
+      </div>
+      <div class="grid">
+        <div class="cc sel"><span class="cbx on"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span><div class="t"><div class="r1"><b>美育中国</b><span class="st doing">进行中</span></div><div class="meta"><div class="pbar"><i style="width:72%"></i></div><span class="pp">72%</span><span class="b">266802400</span></div></div></div>
+        <div class="cc sel"><span class="cbx on"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span><div class="t"><div class="r1"><b>习近平新时代中国特色社会主义思想概论</b><span class="st doing">进行中</span></div><div class="meta"><div class="pbar"><i style="width:45%"></i></div><span class="pp">45%</span><span class="b">266801233</span></div></div></div>
+        <div class="cc"><span class="cbx"></span><div class="t"><div class="r1"><b>大学英语（三）</b><span class="st todo">未开始</span></div><div class="meta"><div class="pbar"><i style="width:0%"></i></div><span class="pp">0%</span><span class="b">266799881</span></div></div></div>
+        <div class="cc sel"><span class="cbx on"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span><div class="t"><div class="r1"><b>计算机网络</b><span class="st doing">进行中</span></div><div class="meta"><div class="pbar"><i style="width:88%"></i></div><span class="pp">88%</span><span class="b">266788540</span></div></div></div>
+        <div class="cc sel"><span class="cbx on"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span><div class="t"><div class="r1"><b>中国近现代史纲要</b><span class="st doing">进行中</span></div><div class="meta"><div class="pbar"><i style="width:60%"></i></div><span class="pp">60%</span><span class="b">266788102</span></div></div></div>
+        <div class="cc"><span class="cbx"></span><div class="t"><div class="r1"><b>高等数学 A（上）</b><span class="st done">已完成</span></div><div class="meta"><div class="pbar"><i class="full" style="width:100%"></i></div><span class="pp">100%</span><span class="b">266787664</span></div></div></div>
+        <div class="cc sel"><span class="cbx on"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span><div class="t"><div class="r1"><b>大学生心理健康教育</b><span class="st doing">进行中</span></div><div class="meta"><div class="pbar"><i style="width:50%"></i></div><span class="pp">50%</span><span class="b">266786001</span></div></div></div>
+        <div class="cc"><span class="cbx"></span><div class="t"><div class="r1"><b>体育与健康</b><span class="st done">已完成</span></div><div class="meta"><div class="pbar"><i class="full" style="width:100%"></i></div><span class="pp">100%</span><span class="b">266785443</span></div></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+</body></html>
